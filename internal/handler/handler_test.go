@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/go-chi/chi/v5"
 	"github.com/kuznet1/urlshrt/internal/repository"
 	"github.com/kuznet1/urlshrt/internal/service"
 	"github.com/stretchr/testify/assert"
@@ -36,17 +37,20 @@ func TestHandler(t *testing.T) {
 			want{"/-1", http.MethodGet, http.StatusBadRequest, "unable to parse \"-1\": it must be alphanumeric\n", ""},
 		}, {
 			"bad method",
-			want{"/1", http.MethodPost, http.StatusBadRequest, "method POST not allowed, allowed is GET\n", ""},
+			want{"/1", http.MethodPost, http.StatusMethodNotAllowed, "", ""},
 		},
 	}
 
 	svc := service.NewService(&repository.MemoryRepo{})
 	h := NewHandler(svc)
+	mux := chi.NewRouter()
+	mux.Post("/", h.Shorten)
+	mux.Get("/{id}", h.Lengthen)
 
 	t.Run("shorten url", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
 		w := httptest.NewRecorder()
-		h.Root(w, r)
+		mux.ServeHTTP(w, r)
 		res := w.Result()
 		defer res.Body.Close()
 		resBody, err := io.ReadAll(res.Body)
@@ -60,7 +64,7 @@ func TestHandler(t *testing.T) {
 			want := test.want
 			r := httptest.NewRequest(want.verb, want.url, nil)
 			w := httptest.NewRecorder()
-			h.Root(w, r)
+			mux.ServeHTTP(w, r)
 			res := w.Result()
 			defer res.Body.Close()
 			resBody, err := io.ReadAll(res.Body)

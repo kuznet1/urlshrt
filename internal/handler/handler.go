@@ -3,12 +3,12 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"github.com/kuznet1/urlshrt/internal/model"
 	"github.com/kuznet1/urlshrt/internal/repository"
 	"github.com/kuznet1/urlshrt/internal/service"
 	"io"
 	"net/http"
-	"strings"
 )
 
 type Handler struct {
@@ -19,21 +19,7 @@ func NewHandler(svc service.Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func (h Handler) Root(w http.ResponseWriter, r *http.Request) {
-	id := strings.Trim(r.URL.Path, "/")
-	if id != "" {
-		h.lengthen(w, r, id)
-	} else {
-		h.shorten(w, r)
-	}
-}
-
-func (h Handler) shorten(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, fmt.Sprintf("method %s not allowed, allowed is %s", r.Method, http.MethodPost), http.StatusBadRequest)
-		return
-	}
-
+func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to read body: %s", err), http.StatusBadRequest)
@@ -56,11 +42,8 @@ func (h Handler) shorten(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h Handler) lengthen(w http.ResponseWriter, r *http.Request, id string) {
-	if r.Method != http.MethodGet {
-		http.Error(w, fmt.Sprintf("method %s not allowed, allowed is %s", r.Method, http.MethodGet), http.StatusBadRequest)
-		return
-	}
+func (h Handler) Lengthen(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
 
 	url, err := h.svc.Lengthen(id)
 	if errors.Is(err, model.ErrIDParsing) {
