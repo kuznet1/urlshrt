@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/kuznet1/urlshrt/internal/config"
 	"github.com/kuznet1/urlshrt/internal/model"
 	"github.com/kuznet1/urlshrt/internal/repository"
 	"github.com/kuznet1/urlshrt/internal/service"
@@ -13,10 +14,11 @@ import (
 
 type Handler struct {
 	svc service.Service
+	cfg config.Config
 }
 
-func NewHandler(svc service.Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc service.Service, cfg config.Config) Handler {
+	return Handler{svc: svc, cfg: cfg}
 }
 
 func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +35,7 @@ func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := fmt.Sprintf("http://localhost:8080/%s", urlID)
+	resp := h.cfg.ShortenerPrefix + "/" + urlID
 
 	w.WriteHeader(http.StatusCreated)
 	_, err = w.Write([]byte(resp))

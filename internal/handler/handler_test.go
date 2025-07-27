@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/kuznet1/urlshrt/internal/config"
 	"github.com/kuznet1/urlshrt/internal/repository"
 	"github.com/kuznet1/urlshrt/internal/service"
 	"github.com/stretchr/testify/assert"
@@ -41,8 +42,12 @@ func TestHandler(t *testing.T) {
 		},
 	}
 
+	cfg := config.Config{
+		ListenAddr:      ":8088",
+		ShortenerPrefix: "http://localhost:8088",
+	}
 	svc := service.NewService(&repository.MemoryRepo{})
-	h := NewHandler(svc)
+	h := NewHandler(svc, cfg)
 	mux := chi.NewRouter()
 	mux.Post("/", h.Shorten)
 	mux.Get("/{id}", h.Lengthen)
@@ -56,7 +61,7 @@ func TestHandler(t *testing.T) {
 		resBody, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, w.Code)
-		assert.Equal(t, "http://localhost:8080/1", string(resBody))
+		assert.Equal(t, "http://localhost:8088/1", string(resBody))
 	})
 
 	for _, test := range tests {
