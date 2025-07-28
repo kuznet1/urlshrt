@@ -1,11 +1,11 @@
 package model
 
 import (
-	"errors"
+	"fmt"
+	"github.com/kuznet1/urlshrt/internal/errs"
+	"net/http"
 	"strconv"
 )
-
-var ErrIDParsing = errors.New("id parsing error")
 
 type URLID uint64
 
@@ -20,7 +20,7 @@ func (urlId URLID) String() string {
 func ParseURLID(id string) (URLID, error) {
 	val, err := strconv.ParseUint(id, 36, 64)
 	if err != nil {
-		return 0, ErrIDParsing
+		return 0, errs.NewHTTPError(fmt.Sprintf("unable to parse %q: it must be alphanumeric", id), http.StatusBadRequest)
 	}
 	return URLID(val), nil
 }

@@ -2,7 +2,9 @@ package repository
 
 import (
 	"fmt"
+	"github.com/kuznet1/urlshrt/internal/errs"
 	"github.com/kuznet1/urlshrt/internal/model"
+	"net/http"
 	"sync"
 	"sync/atomic"
 )
@@ -23,7 +25,7 @@ func (m *MemoryRepo) Put(url string) (model.URLID, error) {
 func (m *MemoryRepo) Get(id model.URLID) (string, error) {
 	val, ok := m.store.Load(id.ID())
 	if !ok {
-		return "", ErrNotFound
+		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q doesn't exist", id), http.StatusNotFound)
 	}
 
 	s, ok := val.(string)

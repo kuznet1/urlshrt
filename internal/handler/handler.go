@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/kuznet1/urlshrt/internal/config"
-	"github.com/kuznet1/urlshrt/internal/model"
-	"github.com/kuznet1/urlshrt/internal/repository"
+	"github.com/kuznet1/urlshrt/internal/errs"
 	"github.com/kuznet1/urlshrt/internal/service"
 	"io"
 	"net/http"
@@ -38,22 +37,16 @@ func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	resp := h.cfg.ShortenerPrefix + "/" + urlID
 
 	w.WriteHeader(http.StatusCreated)
-	_, err = w.Write([]byte(resp))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to write response: %s", err), http.StatusInternalServerError)
-	}
+	w.Write([]byte(resp))
 }
 
 func (h Handler) Lengthen(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	url, err := h.svc.Lengthen(id)
-	if errors.Is(err, model.ErrIDParsing) {
-		http.Error(w, fmt.Sprintf("unable to parse %q: it must be alphanumeric", id), http.StatusBadRequest)
-		return
-	}
-	if errors.Is(err, repository.ErrNotFound) {
-		http.Error(w, fmt.Sprintf("url for shortening %q doesn't exist", id), http.StatusNotFound)
+	var httpErr *errs.HTTPError
+	if errors.As(err, &httpErr) {
+		http.Error(w, httpErr.Error(), httpErr.Code())
 		return
 	}
 	if err != nil {
