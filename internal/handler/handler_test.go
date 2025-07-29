@@ -29,16 +29,16 @@ func TestHandler(t *testing.T) {
 	}{
 		{
 			"existing url",
-			want{"/1", http.MethodGet, http.StatusTemporaryRedirect, "", "http://example.com"},
+			want{"/0", http.MethodGet, http.StatusTemporaryRedirect, "", "http://example.com"},
 		}, {
 			"non-existing url",
-			want{"/2", http.MethodGet, http.StatusNotFound, "url for shortening \"2\" doesn't exist\n", ""},
+			want{"/1", http.MethodGet, http.StatusNotFound, "url for shortening \"1\" doesn't exist\n", ""},
 		}, {
 			"bad url",
 			want{"/-1", http.MethodGet, http.StatusBadRequest, "unable to parse \"-1\": it must be alphanumeric\n", ""},
 		}, {
 			"bad method",
-			want{"/1", http.MethodPost, http.StatusMethodNotAllowed, "", ""},
+			want{"/0", http.MethodPost, http.StatusMethodNotAllowed, "", ""},
 		},
 	}
 
@@ -46,7 +46,7 @@ func TestHandler(t *testing.T) {
 		ListenAddr:      ":8088",
 		ShortenerPrefix: "http://localhost:8088",
 	}
-	svc := service.NewService(&repository.MemoryRepo{})
+	svc := service.NewService(&repository.MemoryRepoMutex{})
 	h := NewHandler(svc, cfg)
 	mux := chi.NewRouter()
 	mux.Post("/", h.Shorten)
@@ -61,7 +61,7 @@ func TestHandler(t *testing.T) {
 		resBody, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, w.Code)
-		assert.Equal(t, "http://localhost:8088/1", string(resBody))
+		assert.Equal(t, "http://localhost:8088/0", string(resBody))
 	})
 
 	for _, test := range tests {

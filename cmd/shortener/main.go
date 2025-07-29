@@ -12,7 +12,7 @@ import (
 
 func main() {
 	cfg := config.ParseArgs()
-	svc := service.NewService(&repository.MemoryRepo{})
+	svc := service.NewService(&repository.MemoryRepoMutex{})
 	h := handler.NewHandler(svc, cfg)
 	mux := chi.NewRouter()
 	mux.Post("/", h.Shorten)
