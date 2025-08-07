@@ -46,8 +46,8 @@ func TestHandler(t *testing.T) {
 		ListenAddr:      ":8088",
 		ShortenerPrefix: "http://localhost:8088",
 	}
-	svc := service.NewService(&repository.MemoryRepo{})
-	h := NewHandler(svc, cfg)
+	svc := service.NewService(&repository.MemoryRepo{}, cfg)
+	h := NewHandler(svc)
 	mux := chi.NewRouter()
 	mux.Post("/", h.Shorten)
 	mux.Get("/{id}", h.Lengthen)

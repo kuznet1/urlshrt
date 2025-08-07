@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
-	"github.com/kuznet1/urlshrt/internal/config"
 	"github.com/kuznet1/urlshrt/internal/errs"
 	"github.com/kuznet1/urlshrt/internal/service"
 	"io"
@@ -13,11 +12,10 @@ import (
 
 type Handler struct {
 	svc service.Service
-	cfg config.Config
 }
 
-func NewHandler(svc service.Service, cfg config.Config) Handler {
-	return Handler{svc: svc, cfg: cfg}
+func NewHandler(svc service.Service) Handler {
+	return Handler{svc: svc}
 }
 
 func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
@@ -28,16 +26,14 @@ func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body := string(bytes)
-	urlID, err := h.svc.Shorten(body)
+	url, err := h.svc.Shorten(body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to shorten url: %s", err), http.StatusInternalServerError)
 		return
 	}
 
-	resp := h.cfg.ShortenerPrefix + "/" + urlID
-
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(resp))
+	w.Write([]byte(url))
 }
 
 func (h Handler) Lengthen(w http.ResponseWriter, r *http.Request) {

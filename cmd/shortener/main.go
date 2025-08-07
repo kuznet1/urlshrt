@@ -13,8 +13,8 @@ import (
 
 func main() {
 	cfg := config.ParseArgs()
-	svc := service.NewService(&repository.MemoryRepo{})
-	h := handler.NewHandler(svc, cfg)
+	svc := service.NewService(&repository.MemoryRepo{}, cfg)
+	h := handler.NewHandler(svc)
 	mux := chi.NewRouter()
 	mux.Post("/", middleware.Logging(h.Shorten))
 	mux.Get("/{id}", middleware.Logging(h.Lengthen))
