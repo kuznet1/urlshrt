@@ -18,6 +18,7 @@ func main() {
 	mux := chi.NewRouter()
 	mux.Post("/", middleware.Logging(h.Shorten))
 	mux.Get("/{id}", middleware.Logging(h.Lengthen))
+	mux.Post("/api/shorten", middleware.Logging(h.ShortenJSON))
 
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
 	err := http.ListenAndServe(cfg.ListenAddr, mux)

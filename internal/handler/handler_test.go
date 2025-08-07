@@ -42,15 +42,7 @@ func TestHandler(t *testing.T) {
 		},
 	}
 
-	cfg := config.Config{
-		ListenAddr:      ":8088",
-		ShortenerPrefix: "http://localhost:8088",
-	}
-	svc := service.NewService(&repository.MemoryRepo{}, cfg)
-	h := NewHandler(svc)
-	mux := chi.NewRouter()
-	mux.Post("/", h.Shorten)
-	mux.Get("/{id}", h.Lengthen)
+	mux := newMux()
 
 	t.Run("shorten url", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
@@ -79,4 +71,31 @@ func TestHandler(t *testing.T) {
 			assert.Equal(t, test.want.locationHeader, res.Header.Get("Location"))
 		})
 	}
+}
+
+func TestShortenJSON(t *testing.T) {
+	mux := newMux()
+	r := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(`{"url":"http://foo.bar"}`))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	res := w.Result()
+	defer res.Body.Close()
+	resBody, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, `{"result":"http://localhost:8088/0"}`, string(resBody))
+}
+
+func newMux() *chi.Mux {
+	cfg := config.Config{
+		ListenAddr:      ":8088",
+		ShortenerPrefix: "http://localhost:8088",
+	}
+	svc := service.NewService(&repository.MemoryRepo{}, cfg)
+	h := NewHandler(svc)
+	mux := chi.NewRouter()
+	mux.Post("/", h.Shorten)
+	mux.Get("/{id}", h.Lengthen)
+	mux.Post("/api/shorten", h.ShortenJSON)
+	return mux
 }
