@@ -16,9 +16,9 @@ func main() {
 	svc := service.NewService(&repository.MemoryRepo{}, cfg)
 	h := handler.NewHandler(svc)
 	mux := chi.NewRouter()
-	mux.Post("/", middleware.Logging(h.Shorten))
-	mux.Get("/{id}", middleware.Logging(h.Lengthen))
-	mux.Post("/api/shorten", middleware.Logging(h.ShortenJSON))
+	mux.Post("/", middleware.Logging(middleware.Compression(h.Shorten)))
+	mux.Get("/{id}", middleware.Logging(middleware.Compression(h.Lengthen)))
+	mux.Post("/api/shorten", middleware.Logging(middleware.Compression(h.ShortenJSON)))
 
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
 	err := http.ListenAndServe(cfg.ListenAddr, mux)
