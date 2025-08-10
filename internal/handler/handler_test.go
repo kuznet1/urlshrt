@@ -13,9 +13,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
+
+const repoFile = "test-repo.json"
 
 type want struct {
 	url            string
@@ -46,6 +49,9 @@ func TestHandler(t *testing.T) {
 	}
 
 	mux := newMux()
+	t.Cleanup(func() {
+		os.Remove(repoFile)
+	})
 
 	t.Run("shorten url", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
@@ -78,6 +84,10 @@ func TestHandler(t *testing.T) {
 
 func TestShortenJSON(t *testing.T) {
 	mux := newMux()
+	t.Cleanup(func() {
+		os.Remove(repoFile)
+	})
+
 	r := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(`{"url":"http://foo.bar"}`))
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, r)
@@ -91,6 +101,10 @@ func TestShortenJSON(t *testing.T) {
 
 func TestShortenJSONGzip(t *testing.T) {
 	mux := newMux()
+	t.Cleanup(func() {
+		os.Remove(repoFile)
+	})
+
 	t.Run("shorten with gzip", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(`{"url":"http://foo.bar"}`))
 		r.Header.Set("Accept-Encoding", "gzip")
@@ -129,6 +143,10 @@ func TestShortenJSONGzip(t *testing.T) {
 
 func TestPostBodyGzip(t *testing.T) {
 	mux := newMux()
+	t.Cleanup(func() {
+		os.Remove(repoFile)
+	})
+
 	url := "http://foo.bar"
 	t.Run("shorten with gzip body", func(t *testing.T) {
 		var buf bytes.Buffer
@@ -167,7 +185,13 @@ func newMux() *chi.Mux {
 		ListenAddr:      ":8088",
 		ShortenerPrefix: "http://localhost:8088",
 	}
-	svc := service.NewService(&repository.MemoryRepo{}, cfg)
+
+	repo, err := repository.NewMemoryRepo(repoFile)
+	if err != nil {
+		panic(err)
+	}
+
+	svc := service.NewService(repo, cfg)
 	h := NewHandler(svc)
 	mux := chi.NewRouter()
 	mux.Post("/", middleware.Compression(h.Shorten))

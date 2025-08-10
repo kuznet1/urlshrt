@@ -13,7 +13,11 @@ import (
 
 func main() {
 	cfg := config.ParseArgs()
-	svc := service.NewService(&repository.MemoryRepo{}, cfg)
+	repo, err := repository.NewMemoryRepo(cfg.FileStoragePath)
+	if err != nil {
+		panic(err)
+	}
+	svc := service.NewService(repo, cfg)
 	h := handler.NewHandler(svc)
 	mux := chi.NewRouter()
 	mux.Post("/", middleware.Logging(middleware.Compression(h.Shorten)))
@@ -21,7 +25,7 @@ func main() {
 	mux.Post("/api/shorten", middleware.Logging(middleware.Compression(h.ShortenJSON)))
 
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
-	err := http.ListenAndServe(cfg.ListenAddr, mux)
+	err = http.ListenAndServe(cfg.ListenAddr, mux)
 	if err != nil {
 		panic(err)
 	}
