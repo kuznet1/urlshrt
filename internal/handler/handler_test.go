@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"compress/gzip"
 	"github.com/go-chi/chi/v5"
 	"github.com/kuznet1/urlshrt/internal/config"
@@ -122,6 +123,41 @@ func TestShortenJSONGzip(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "", res.Header.Get("Content-Encoding"))
 		assert.Equal(t, "", string(resBody))
+		require.Equal(t, http.StatusTemporaryRedirect, res.StatusCode)
+	})
+}
+
+func TestPostBodyGzip(t *testing.T) {
+	mux := newMux()
+	url := "http://foo.bar"
+	t.Run("shorten with gzip body", func(t *testing.T) {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		_, err := gz.Write([]byte(url))
+		require.NoError(t, err)
+		gz.Close()
+		r := httptest.NewRequest(http.MethodPost, "/", &buf)
+		r.Header.Set("Content-Encoding", "gzip")
+
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		res := w.Result()
+		defer res.Body.Close()
+
+		resBody, err := io.ReadAll(res.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, res.StatusCode)
+		assert.Equal(t, "http://localhost:8088/0", string(resBody))
+	})
+
+	t.Run("check redirect", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/0", nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		res := w.Result()
+		defer res.Body.Close()
+
+		require.Equal(t, url, res.Header.Get("Location"))
 		require.Equal(t, http.StatusTemporaryRedirect, res.StatusCode)
 	})
 }

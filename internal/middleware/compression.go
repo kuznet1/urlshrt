@@ -76,6 +76,17 @@ func (c *compressedWriter) Close() error {
 
 func Compression(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Header.Get("Content-Encoding") == "gzip" {
+			gz, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, "failed to decompress request body", http.StatusBadRequest)
+				return
+			}
+			r.Body = gz
+			r.Header.Del("Content-Encoding")
+		}
+
 		acceptEncodings := strings.Split(r.Header.Get("Accept-Encoding"), ",")
 		supportsGzip := false
 		for _, acceptEncoding := range acceptEncodings {
