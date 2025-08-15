@@ -7,14 +7,12 @@ import (
 	"go.uber.org/zap"
 )
 
-var Log *zap.Logger
+type RequestLogger struct {
+	logger *zap.Logger
+}
 
-func init() {
-	var err error
-	Log, err = zap.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
+func NewRequestLogger(logger *zap.Logger) RequestLogger {
+	return RequestLogger{logger: logger}
 }
 
 type wrappedWriter struct {
@@ -34,18 +32,18 @@ func (w *wrappedWriter) Write(b []byte) (len int, err error) {
 	return
 }
 
-func Logging(callback http.HandlerFunc) http.HandlerFunc {
+func (l RequestLogger) Wrap(callback http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writer := &wrappedWriter{w, 0, 0}
 		start := time.Now()
 		callback(writer, r)
 		elapsed := time.Since(start)
-		Log.Info("request:",
+		l.logger.Info("request:",
 			zap.String("uri", r.RequestURI),
 			zap.String("method", r.Method),
 			zap.Duration("time", elapsed),
 		)
-		Log.Info("response:",
+		l.logger.Info("response:",
 			zap.Int("status", writer.status),
 			zap.Int("size", writer.len),
 		)

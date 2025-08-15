@@ -8,16 +8,18 @@ import (
 	"github.com/kuznet1/urlshrt/internal/errs"
 	"github.com/kuznet1/urlshrt/internal/model"
 	"github.com/kuznet1/urlshrt/internal/service"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 )
 
 type Handler struct {
-	svc service.Service
+	svc    service.Service
+	logger *zap.Logger
 }
 
-func NewHandler(svc service.Service) Handler {
-	return Handler{svc: svc}
+func NewHandler(svc service.Service, logger *zap.Logger) Handler {
+	return Handler{svc: svc, logger: logger}
 }
 
 func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +32,7 @@ func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	body := string(bytes)
 	url, err := h.svc.Shorten(body)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to shorten url: %s", err), http.StatusInternalServerError)
+		internalError("failed to shorten url", err, h.logger, w)
 		return
 	}
 
@@ -47,7 +49,7 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 
 	url, err := h.svc.Shorten(req.URL)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to shorten url: %s", err), http.StatusInternalServerError)
+		internalError("failed to shorten url", err, h.logger, w)
 		return
 	}
 
@@ -55,13 +57,13 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 		Result: url,
 	}
 
-	respJSON(w, resp, http.StatusCreated)
+	respJSON(w, resp, http.StatusCreated, h.logger)
 }
 
-func respJSON(w http.ResponseWriter, resp any, code int) {
+func respJSON(w http.ResponseWriter, resp any, code int, logger *zap.Logger) {
 	data, err := json.Marshal(resp)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to encode response: %s", err), http.StatusInternalServerError)
+		internalError("failed to encode response", err, logger, w)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -79,10 +81,15 @@ func (h Handler) Lengthen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to lengthen url: %s", err), http.StatusInternalServerError)
+		internalError("failed to lengthen url", err, h.logger, w)
 		return
 	}
 
 	w.Header().Set("Location", url)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+}
+
+func internalError(msg string, err error, logger *zap.Logger, w http.ResponseWriter) {
+	logger.Error(msg, zap.Error(err))
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 }

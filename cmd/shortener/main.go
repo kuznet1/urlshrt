@@ -8,25 +8,40 @@ import (
 	"github.com/kuznet1/urlshrt/internal/middleware"
 	"github.com/kuznet1/urlshrt/internal/repository"
 	"github.com/kuznet1/urlshrt/internal/service"
+	"go.uber.org/zap"
+	"log"
 	"net/http"
 )
 
 func main() {
-	cfg := config.ParseArgs()
+	cfg, err := config.ParseArgs()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	repo, err := repository.NewMemoryRepo(cfg.FileStoragePath)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
+
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	svc := service.NewService(repo, cfg)
-	h := handler.NewHandler(svc)
+	h := handler.NewHandler(svc, logger)
 	mux := chi.NewRouter()
-	mux.Post("/", middleware.Logging(middleware.Compression(h.Shorten)))
-	mux.Get("/{id}", middleware.Logging(middleware.Compression(h.Lengthen)))
-	mux.Post("/api/shorten", middleware.Logging(middleware.Compression(h.ShortenJSON)))
+
+	requestLogger := middleware.NewRequestLogger(logger)
+
+	mux.Post("/", requestLogger.Wrap(middleware.Compression(h.Shorten)))
+	mux.Get("/{id}", requestLogger.Wrap(middleware.Compression(h.Lengthen)))
+	mux.Post("/api/shorten", requestLogger.Wrap(middleware.Compression(h.ShortenJSON)))
 
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
 	err = http.ListenAndServe(cfg.ListenAddr, mux)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
