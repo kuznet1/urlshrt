@@ -49,7 +49,10 @@ func TestHandler(t *testing.T) {
 		},
 	}
 
-	mux := newMux(t)
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("shorten url", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
@@ -81,7 +84,10 @@ func TestHandler(t *testing.T) {
 }
 
 func TestShortenJSON(t *testing.T) {
-	mux := newMux(t)
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	r := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(`{"url":"http://foo.bar"}`))
 	w := httptest.NewRecorder()
@@ -95,7 +101,10 @@ func TestShortenJSON(t *testing.T) {
 }
 
 func TestShortenJSONGzip(t *testing.T) {
-	mux := newMux(t)
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("shorten with gzip", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(`{"url":"http://foo.bar"}`))
@@ -134,7 +143,10 @@ func TestShortenJSONGzip(t *testing.T) {
 }
 
 func TestPostBodyGzip(t *testing.T) {
-	mux := newMux(t)
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	url := "http://foo.bar"
 	t.Run("shorten with gzip body", func(t *testing.T) {
@@ -169,7 +181,7 @@ func TestPostBodyGzip(t *testing.T) {
 	})
 }
 
-func newMux(t *testing.T) *chi.Mux {
+func newMux(t *testing.T) (*chi.Mux, error) {
 	cfg := config.Config{
 		ListenAddr:      ":8088",
 		ShortenerPrefix: "http://localhost:8088",
@@ -177,24 +189,25 @@ func newMux(t *testing.T) *chi.Mux {
 
 	repo, err := repository.NewMemoryRepo(repoFile)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	svc := service.NewService(repo, cfg)
 	h := NewHandler(svc, logger)
 	mux := chi.NewRouter()
-	mux.Post("/", middleware.Compression(h.Shorten))
-	mux.Get("/{id}", middleware.Compression(h.Lengthen))
-	mux.Post("/api/shorten", middleware.Compression(h.ShortenJSON))
+	mux.Use(middleware.Compression)
+	mux.Post("/", h.Shorten)
+	mux.Get("/{id}", h.Lengthen)
+	mux.Post("/api/shorten", h.ShortenJSON)
 
 	t.Cleanup(func() {
 		os.Remove(repoFile)
 	})
 
-	return mux
+	return mux, nil
 }

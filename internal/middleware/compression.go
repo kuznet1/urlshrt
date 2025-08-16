@@ -74,8 +74,8 @@ func (c *compressedWriter) Close() error {
 	return nil
 }
 
-func Compression(handler http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func Compression(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Header.Get("Content-Encoding") == "gzip" {
 			gz, err := gzip.NewReader(r.Body)
@@ -94,12 +94,12 @@ func Compression(handler http.HandlerFunc) http.HandlerFunc {
 		}
 
 		if !supportsGzip {
-			handler(w, r)
+			next.ServeHTTP(w, r)
 			return
 		}
 
 		cw := newCompressedWriter(w)
 		defer cw.Close()
-		handler(cw, r)
-	}
+		next.ServeHTTP(cw, r)
+	})
 }

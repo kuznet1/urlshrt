@@ -32,11 +32,11 @@ func (w *wrappedWriter) Write(b []byte) (len int, err error) {
 	return
 }
 
-func (l RequestLogger) Wrap(callback http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (l RequestLogger) Logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writer := &wrappedWriter{w, 0, 0}
 		start := time.Now()
-		callback(writer, r)
+		next.ServeHTTP(writer, r)
 		elapsed := time.Since(start)
 		l.logger.Info("request:",
 			zap.String("uri", r.RequestURI),
@@ -47,5 +47,5 @@ func (l RequestLogger) Wrap(callback http.HandlerFunc) http.HandlerFunc {
 			zap.Int("status", writer.status),
 			zap.Int("size", writer.len),
 		)
-	}
+	})
 }

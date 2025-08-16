@@ -31,13 +31,12 @@ func main() {
 
 	svc := service.NewService(repo, cfg)
 	h := handler.NewHandler(svc, logger)
-	mux := chi.NewRouter()
-
 	requestLogger := middleware.NewRequestLogger(logger)
-
-	mux.Post("/", requestLogger.Wrap(middleware.Compression(h.Shorten)))
-	mux.Get("/{id}", requestLogger.Wrap(middleware.Compression(h.Lengthen)))
-	mux.Post("/api/shorten", requestLogger.Wrap(middleware.Compression(h.ShortenJSON)))
+	mux := chi.NewRouter()
+	mux.Use(requestLogger.Logging, middleware.Compression)
+	mux.Post("/", h.Shorten)
+	mux.Get("/{id}", h.Lengthen)
+	mux.Post("/api/shorten", h.ShortenJSON)
 
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
 	err = http.ListenAndServe(cfg.ListenAddr, mux)
