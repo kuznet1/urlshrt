@@ -32,7 +32,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	repo, err := repository.NewMemoryRepo(cfg.FileStoragePath)
+	repo, err := repository.NewMemoryRepo(cfg.FileStoragePath, logger)
 	if err != nil {
 		log.Fatal(err)
 	}

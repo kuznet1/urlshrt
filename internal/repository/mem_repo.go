@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/kuznet1/urlshrt/internal/errs"
 	"github.com/kuznet1/urlshrt/internal/model"
+	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"sync"
@@ -16,8 +17,14 @@ type MemoryRepo struct {
 	fname string
 }
 
-func NewMemoryRepo(fname string) (*MemoryRepo, error) {
+func NewMemoryRepo(fname string, logger *zap.Logger) (*MemoryRepo, error) {
 	res := &MemoryRepo{fname: fname}
+
+	if fname == "" {
+		logger.Info("file storage path is empty, saving to file is disabled")
+		return res, nil
+	}
+
 	_, err := os.Stat(fname)
 	if err != nil {
 		return res, nil
@@ -38,6 +45,9 @@ func NewMemoryRepo(fname string) (*MemoryRepo, error) {
 }
 
 func (m *MemoryRepo) dump() error {
+	if m.fname == "" {
+		return nil
+	}
 	file, err := os.Create(m.fname)
 	if err != nil {
 		return fmt.Errorf("failed to save urls to file %s: %w", m.fname, err)

@@ -187,12 +187,12 @@ func newMux(t *testing.T) (*chi.Mux, error) {
 		ShortenerPrefix: "http://localhost:8088",
 	}
 
-	repo, err := repository.NewMemoryRepo(repoFile)
+	logger, err := zap.NewDevelopment()
 	if err != nil {
 		return nil, err
 	}
 
-	logger, err := zap.NewDevelopment()
+	repo, err := repository.NewMemoryRepo(repoFile, logger)
 	if err != nil {
 		return nil, err
 	}
