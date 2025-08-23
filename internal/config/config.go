@@ -17,7 +17,7 @@ func ParseArgs() (Config, error) {
 	flag.StringVar(&cfg.ListenAddr, "a", ":8080", "address to listen on")
 	flag.StringVar(&cfg.ShortenerPrefix, "b", "http://localhost:8080", "prefix for url shortening")
 	flag.StringVar(&cfg.FileStoragePath, "f", "", "file storage path")
-	flag.StringVar(&cfg.DatabaseDSN, "d", "postgres://postgres@localhost:5432/urlshrt", "database connection string")
+	flag.StringVar(&cfg.DatabaseDSN, "d", "", "database connection string")
 	flag.Parse()
 
 	return cfg, env.Parse(&cfg)

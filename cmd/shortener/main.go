@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/kuznet1/urlshrt/internal/config"
@@ -12,8 +11,6 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"net/http"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
@@ -27,12 +24,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db, err := sql.Open("pgx", cfg.DatabaseDSN)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	repo, err := repository.NewMemoryRepo(cfg.FileStoragePath, logger)
+	repo, err := repository.NewRepo(cfg, logger)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,7 +38,7 @@ func main() {
 	mux.Get("/{id}", h.Lengthen)
 	mux.Post("/api/shorten", h.ShortenJSON)
 	mux.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		err := db.Ping()
+		err := repo.Ping()
 		if err != nil {
 			logger.Error("db conn error", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)

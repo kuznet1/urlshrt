@@ -2,6 +2,7 @@ package repository
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/kuznet1/urlshrt/internal/errs"
 	"github.com/kuznet1/urlshrt/internal/model"
@@ -10,6 +11,8 @@ import (
 	"os"
 	"sync"
 )
+
+var errNoDB = errors.New("database is not used")
 
 type MemoryRepo struct {
 	mutex sync.RWMutex
@@ -80,4 +83,8 @@ func (m *MemoryRepo) Get(id model.URLID) (string, error) {
 	}
 
 	return m.store[intID], nil
+}
+
+func (m *MemoryRepo) Ping() error {
+	return errNoDB
 }
