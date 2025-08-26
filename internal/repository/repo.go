@@ -9,6 +9,7 @@ import (
 type Repo interface {
 	Put(url string) (model.URLID, error)
 	Get(id model.URLID) (string, error)
+	BatchPut(urls []string) ([]model.URLID, error)
 	Ping() error
 }
 

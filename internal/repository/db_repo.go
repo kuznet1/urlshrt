@@ -47,6 +47,35 @@ func (m *DBRepo) Get(id model.URLID) (string, error) {
 	return url, err
 }
 
+func (m *DBRepo) BatchPut(urls []string) ([]model.URLID, error) {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	done := false
+	defer func() {
+		if done {
+			tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}()
+
+	var res []model.URLID
+	for _, url := range urls {
+		var id model.URLID
+		err := tx.QueryRow("INSERT INTO links (url) VALUES ($1) RETURNING id", url).Scan(&id)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, id)
+	}
+
+	done = true
+	return res, nil
+}
+
 func (m *DBRepo) Ping() error {
 	return m.db.Ping()
 }

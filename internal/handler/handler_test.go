@@ -100,6 +100,22 @@ func TestShortenJSON(t *testing.T) {
 	assert.Equal(t, `{"result":"http://localhost:8088/0"}`, string(resBody))
 }
 
+func TestBacthShorten(t *testing.T) {
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/api/shorten/batch", strings.NewReader(`[{"correlation_id":"foo","original_url":"http://foo.bar"}]`))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	res := w.Result()
+	defer res.Body.Close()
+	resBody, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, `[{"correlation_id":"foo","short_url":"http://localhost:8088/0"}]`, string(resBody))
+}
+
 func TestShortenJSONGzip(t *testing.T) {
 	mux, err := newMux(t)
 	if err != nil {
@@ -204,6 +220,7 @@ func newMux(t *testing.T) (*chi.Mux, error) {
 	mux.Post("/", h.Shorten)
 	mux.Get("/{id}", h.Lengthen)
 	mux.Post("/api/shorten", h.ShortenJSON)
+	mux.Post("/api/shorten/batch", h.ShortenBatch)
 
 	t.Cleanup(func() {
 		os.Remove(repoFile)

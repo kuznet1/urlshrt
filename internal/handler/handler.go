@@ -60,6 +60,35 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 	respJSON(w, resp, http.StatusCreated, h.logger)
 }
 
+func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
+	var req []model.BatchShortenRequestItem
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode body: %s", err), http.StatusBadRequest)
+	}
+
+	var urls []string
+	for _, reqItem := range req {
+		urls = append(urls, reqItem.OriginalURL)
+	}
+
+	shortenLinks, err := h.svc.BatchShorten(urls)
+	if err != nil {
+		internalError("failed to shorten urls", err, h.logger, w)
+		return
+	}
+
+	resp := []model.BatchShortenResponseItem{}
+	for i := range urls {
+		resp = append(resp, model.BatchShortenResponseItem{
+			CorrelationID: req[i].CorrelationID,
+			ShortURL:      shortenLinks[i],
+		})
+	}
+
+	respJSON(w, resp, http.StatusCreated, h.logger)
+}
+
 func respJSON(w http.ResponseWriter, resp any, code int, logger *zap.Logger) {
 	data, err := json.Marshal(resp)
 	if err != nil {

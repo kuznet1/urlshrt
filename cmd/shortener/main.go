@@ -37,6 +37,7 @@ func main() {
 	mux.Post("/", h.Shorten)
 	mux.Get("/{id}", h.Lengthen)
 	mux.Post("/api/shorten", h.ShortenJSON)
+	mux.Post("/api/shorten/batch", h.ShortenBatch)
 	mux.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		err := repo.Ping()
 		if err != nil {

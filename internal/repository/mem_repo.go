@@ -85,6 +85,24 @@ func (m *MemoryRepo) Get(id model.URLID) (string, error) {
 	return m.store[intID], nil
 }
 
+func (m *MemoryRepo) BatchPut(urls []string) ([]model.URLID, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	var res []model.URLID
+	for _, url := range urls {
+		m.store = append(m.store, url)
+		res = append(res, model.URLID(len(m.store)-1))
+	}
+
+	err := m.dump()
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 func (m *MemoryRepo) Ping() error {
 	return errNoDB
 }
