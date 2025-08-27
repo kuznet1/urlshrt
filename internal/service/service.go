@@ -17,10 +17,7 @@ func NewService(repo repository.Repo, cfg config.Config) Service {
 
 func (svc Service) Shorten(url string) (string, error) {
 	urlid, err := svc.repo.Put(url)
-	if err != nil {
-		return "", err
-	}
-	return svc.cfg.ShortenerPrefix + "/" + urlid.String(), nil
+	return svc.cfg.ShortenerPrefix + "/" + urlid.String(), err
 }
 
 func (svc Service) BatchShorten(urls []string) ([]string, error) {

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -31,14 +32,37 @@ func NewDBRepo(dsn string, logger *zap.Logger) (*DBRepo, error) {
 }
 
 func (m *DBRepo) Put(url string) (model.URLID, error) {
-	var id model.URLID
-	err := m.db.QueryRow("INSERT INTO links (url) VALUES ($1) RETURNING id", url).Scan(&id)
-	return id, err
+	return doPut(url, m.db)
+}
+
+type queryRower interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func doPut(url string, rower queryRower) (model.URLID, error) {
+	var urlFK int64
+	var urlid model.URLID
+	err := rower.QueryRow("INSERT INTO urls (url) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id", url).Scan(&urlFK)
+	if err == nil {
+		err = rower.QueryRow("INSERT INTO links (url_fk) VALUES ($1) RETURNING id", urlFK).Scan(&urlid)
+		return urlid, err
+	}
+
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+
+	err = rower.QueryRow("SELECT l.id FROM links l JOIN urls u ON l.url_fk = u.id WHERE u.url = $1", url).Scan(&urlid)
+	if err != nil {
+		return 0, fmt.Errorf("url is duplicated, but unable to get existing: %w", err)
+	}
+
+	return urlid, errs.NewDuplicatedURLError(url)
 }
 
 func (m *DBRepo) Get(id model.URLID) (string, error) {
 	var url string
-	err := m.db.QueryRow("SELECT url FROM links WHERE id = $1", id).Scan(&url)
+	err := m.db.QueryRow("SELECT u.url FROM links l JOIN urls u ON l.url_fk = u.id WHERE l.id = $1", id).Scan(&url)
 
 	if err == sql.ErrNoRows {
 		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q doesn't exist", id), http.StatusNotFound)
@@ -64,16 +88,17 @@ func (m *DBRepo) BatchPut(urls []string) ([]model.URLID, error) {
 
 	var res []model.URLID
 	for _, url := range urls {
-		var id model.URLID
-		err := tx.QueryRow("INSERT INTO links (url) VALUES ($1) RETURNING id", url).Scan(&id)
-		if err != nil {
-			return nil, err
-		}
+		id, err1 := doPut(url, tx)
+		err = errors.Join(err, err1)
 		res = append(res, id)
 	}
 
+	if err != nil {
+		return nil, err
+	}
+
 	done = true
-	return res, nil
+	return res, err
 }
 
 func (m *DBRepo) Ping() error {

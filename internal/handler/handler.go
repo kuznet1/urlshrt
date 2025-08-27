@@ -31,12 +31,19 @@ func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 
 	body := string(bytes)
 	url, err := h.svc.Shorten(body)
-	if err != nil {
+	var duplicatedError *errs.DuplicatedURLError
+	isDuplicatedError := errors.As(err, &duplicatedError)
+	if err != nil && !isDuplicatedError {
 		internalError("failed to shorten url", err, h.logger, w)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	if isDuplicatedError {
+		w.WriteHeader(http.StatusConflict)
+	} else {
+		w.WriteHeader(http.StatusCreated)
+	}
+
 	w.Write([]byte(url))
 }
 
@@ -48,7 +55,9 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	url, err := h.svc.Shorten(req.URL)
-	if err != nil {
+	var duplicatedError *errs.DuplicatedURLError
+	isDuplicatedError := errors.As(err, &duplicatedError)
+	if err != nil && !isDuplicatedError {
 		internalError("failed to shorten url", err, h.logger, w)
 		return
 	}
@@ -57,7 +66,11 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 		Result: url,
 	}
 
-	respJSON(w, resp, http.StatusCreated, h.logger)
+	if isDuplicatedError {
+		respJSON(w, resp, http.StatusConflict, h.logger)
+	} else {
+		respJSON(w, resp, http.StatusCreated, h.logger)
+	}
 }
 
 func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
@@ -73,6 +86,12 @@ func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortenLinks, err := h.svc.BatchShorten(urls)
+	var duplicatedError *errs.DuplicatedURLError
+	if errors.As(err, &duplicatedError) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+
 	if err != nil {
 		internalError("failed to shorten urls", err, h.logger, w)
 		return

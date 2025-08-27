@@ -19,3 +19,17 @@ func (e HTTPError) Error() string {
 func (e HTTPError) Code() int {
 	return e.code
 }
+
+type DuplicatedURLError struct {
+	url string
+}
+
+func NewDuplicatedURLError(url string) *DuplicatedURLError {
+	return &DuplicatedURLError{
+		url: url,
+	}
+}
+
+func (e DuplicatedURLError) Error() string {
+	return "duplicated URL: " + e.url
+}

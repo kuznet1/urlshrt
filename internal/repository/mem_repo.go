@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 )
 
@@ -63,6 +64,12 @@ func (m *MemoryRepo) dump() error {
 func (m *MemoryRepo) Put(url string) (model.URLID, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+
+	idx := slices.Index(m.store, url)
+	if idx >= 0 {
+		return model.URLID(idx), errs.NewDuplicatedURLError(url)
+	}
+
 	m.store = append(m.store, url)
 
 	err := m.dump()
@@ -89,18 +96,25 @@ func (m *MemoryRepo) BatchPut(urls []string) ([]model.URLID, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	var err error
 	var res []model.URLID
 	for _, url := range urls {
+		idx := slices.Index(m.store, url)
+		if idx >= 0 {
+			res = append(res, model.URLID(idx))
+			err = errors.Join(err, errs.NewDuplicatedURLError(url))
+			continue
+		}
 		m.store = append(m.store, url)
 		res = append(res, model.URLID(len(m.store)-1))
 	}
 
-	err := m.dump()
-	if err != nil {
+	err1 := m.dump()
+	if err1 != nil {
 		return nil, err
 	}
 
-	return res, nil
+	return res, err
 }
 
 func (m *MemoryRepo) Ping() error {
