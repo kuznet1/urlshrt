@@ -22,7 +22,7 @@ type DBRepo struct {
 func NewDBRepo(dsn string, logger *zap.Logger) (*DBRepo, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 	err = applyMigrations(db, logger)
 	if err != nil {
@@ -32,27 +32,49 @@ func NewDBRepo(dsn string, logger *zap.Logger) (*DBRepo, error) {
 }
 
 func (m *DBRepo) Put(url string) (model.URLID, error) {
-	return doPut(url, m.db)
+	tx, err := m.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	done := false
+	defer func() {
+		if done {
+			tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}()
+
+	res, err := doPut(url, tx)
+
+	done = true
+	return res, err
 }
 
-type queryRower interface {
+type DB interface {
 	QueryRow(query string, args ...any) *sql.Row
+	Query(query string, args ...any) (*sql.Rows, error)
+	Exec(query string, args ...any) (sql.Result, error)
 }
 
-func doPut(url string, rower queryRower) (model.URLID, error) {
+func doPut(url string, db DB) (model.URLID, error) {
 	var urlFK int64
 	var urlid model.URLID
-	err := rower.QueryRow("INSERT INTO urls (url) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id", url).Scan(&urlFK)
+	err := db.QueryRow("INSERT INTO urls (url) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id", url).Scan(&urlFK)
 	if err == nil {
-		err = rower.QueryRow("INSERT INTO links (url_fk) VALUES ($1) RETURNING id", urlFK).Scan(&urlid)
+		err = db.QueryRow("INSERT INTO links (url_fk) VALUES ($1) RETURNING id", urlFK).Scan(&urlid)
+		if err != nil {
+			return 0, fmt.Errorf("failed to insert link: %w", err)
+		}
 		return urlid, err
 	}
 
 	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
+		return 0, fmt.Errorf("failed to insert url: %w", err)
 	}
 
-	err = rower.QueryRow("SELECT l.id FROM links l JOIN urls u ON l.url_fk = u.id WHERE u.url = $1", url).Scan(&urlid)
+	err = db.QueryRow("SELECT l.id FROM links l JOIN urls u ON l.url_fk = u.id WHERE u.url = $1", url).Scan(&urlid)
 	if err != nil {
 		return 0, fmt.Errorf("url is duplicated, but unable to get existing: %w", err)
 	}
@@ -74,7 +96,7 @@ func (m *DBRepo) Get(id model.URLID) (string, error) {
 func (m *DBRepo) BatchPut(urls []string) ([]model.URLID, error) {
 	tx, err := m.db.Begin()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	done := false
@@ -109,12 +131,12 @@ func applyMigrations(db *sql.DB, logger *zap.Logger) error {
 	logger.Info("Applying migrations...")
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to init driver: %w", err)
 	}
 
 	m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to init migrate: %w", err)
 	}
 
 	err = m.Up()
