@@ -52,29 +52,18 @@ func (m *DBRepo) Put(url string) (model.URLID, error) {
 	return res, err
 }
 
-type DB interface {
-	QueryRow(query string, args ...any) *sql.Row
-	Query(query string, args ...any) (*sql.Rows, error)
-	Exec(query string, args ...any) (sql.Result, error)
-}
-
-func doPut(url string, db DB) (model.URLID, error) {
-	var urlFK int64
+func doPut(url string, tx *sql.Tx) (model.URLID, error) {
 	var urlid model.URLID
-	err := db.QueryRow("INSERT INTO urls (url) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id", url).Scan(&urlFK)
+	err := tx.QueryRow("INSERT INTO links (url) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id", url).Scan(&urlid)
 	if err == nil {
-		err = db.QueryRow("INSERT INTO links (url_fk) VALUES ($1) RETURNING id", urlFK).Scan(&urlid)
-		if err != nil {
-			return 0, fmt.Errorf("failed to insert link: %w", err)
-		}
-		return urlid, err
+		return urlid, nil
 	}
 
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("failed to insert url: %w", err)
 	}
 
-	err = db.QueryRow("SELECT l.id FROM links l JOIN urls u ON l.url_fk = u.id WHERE u.url = $1", url).Scan(&urlid)
+	err = tx.QueryRow("SELECT id FROM links WHERE url = $1", url).Scan(&urlid)
 	if err != nil {
 		return 0, fmt.Errorf("url is duplicated, but unable to get existing: %w", err)
 	}
@@ -84,7 +73,7 @@ func doPut(url string, db DB) (model.URLID, error) {
 
 func (m *DBRepo) Get(id model.URLID) (string, error) {
 	var url string
-	err := m.db.QueryRow("SELECT u.url FROM links l JOIN urls u ON l.url_fk = u.id WHERE l.id = $1", id).Scan(&url)
+	err := m.db.QueryRow("SELECT url FROM links WHERE id = $1", id).Scan(&url)
 
 	if err == sql.ErrNoRows {
 		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q doesn't exist", id), http.StatusNotFound)
