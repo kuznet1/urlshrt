@@ -1,16 +1,20 @@
 package repository
 
 import (
+	"context"
+	"fmt"
 	"github.com/kuznet1/urlshrt/internal/config"
 	"github.com/kuznet1/urlshrt/internal/model"
 	"go.uber.org/zap"
 )
 
 type Repo interface {
-	Put(url string) (model.URLID, error)
-	Get(id model.URLID) (string, error)
-	BatchPut(urls []string) ([]model.URLID, error)
-	Ping() error
+	Put(ctx context.Context, url string) (model.URLID, error)
+	Get(ctx context.Context, id model.URLID) (string, error)
+	BatchPut(ctx context.Context, urls []string) ([]model.URLID, error)
+	CreateUser(ctx context.Context) (int, error)
+	UserUrls(ctx context.Context) (map[model.URLID]string, error)
+	Ping(ctx context.Context) error
 }
 
 func NewRepo(cfg config.Config, logger *zap.Logger) (Repo, error) {
@@ -18,4 +22,13 @@ func NewRepo(cfg config.Config, logger *zap.Logger) (Repo, error) {
 		return NewDBRepo(cfg.DatabaseDSN, logger)
 	}
 	return NewMemoryRepo(cfg.FileStoragePath, logger)
+}
+
+func GetUserId(ctx context.Context) (int, error) {
+	val := ctx.Value("userID")
+	id, ok := val.(int)
+	if !ok {
+		return 0, fmt.Errorf("unable to get id")
+	}
+	return id, nil
 }

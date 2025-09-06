@@ -17,6 +17,10 @@ func (urlId URLID) String() string {
 	return strconv.FormatUint(urlId.ID(), 36)
 }
 
+func (urlId URLID) AsURL(prefix string) string {
+	return prefix + "/" + urlId.String()
+}
+
 func ParseURLID(id string) (URLID, error) {
 	val, err := strconv.ParseUint(id, 36, 64)
 	if err != nil {

@@ -10,6 +10,7 @@ type Config struct {
 	ShortenerPrefix string `env:"BASE_URL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	DatabaseDSN     string `env:"DATABASE_DSN"`
+	SecretKey       string `env:"SECRET_KEY"`
 }
 
 func ParseArgs() (Config, error) {
@@ -18,6 +19,7 @@ func ParseArgs() (Config, error) {
 	flag.StringVar(&cfg.ShortenerPrefix, "b", "http://localhost:8080", "prefix for url shortening")
 	flag.StringVar(&cfg.FileStoragePath, "f", "", "file storage path")
 	flag.StringVar(&cfg.DatabaseDSN, "d", "", "database connection string")
+	flag.StringVar(&cfg.SecretKey, "k", "", "secret key for cookie signing")
 	flag.Parse()
 
 	return cfg, env.Parse(&cfg)

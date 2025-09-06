@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -31,8 +32,13 @@ func NewDBRepo(dsn string, logger *zap.Logger) (*DBRepo, error) {
 	return &DBRepo{db: db}, nil
 }
 
-func (m *DBRepo) Put(url string) (model.URLID, error) {
-	tx, err := m.db.Begin()
+func (m *DBRepo) Put(ctx context.Context, url string) (model.URLID, error) {
+	userId, err := GetUserId(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -46,15 +52,15 @@ func (m *DBRepo) Put(url string) (model.URLID, error) {
 		}
 	}()
 
-	res, err := doPut(url, tx)
+	res, err := doPut(url, userId, tx)
 
 	done = true
 	return res, err
 }
 
-func doPut(url string, tx *sql.Tx) (model.URLID, error) {
+func doPut(url string, userID int, tx *sql.Tx) (model.URLID, error) {
 	var urlid model.URLID
-	err := tx.QueryRow("INSERT INTO links (url) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id", url).Scan(&urlid)
+	err := tx.QueryRow("INSERT INTO links (url, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING id", url, userID).Scan(&urlid)
 	if err == nil {
 		return urlid, nil
 	}
@@ -71,9 +77,9 @@ func doPut(url string, tx *sql.Tx) (model.URLID, error) {
 	return urlid, errs.NewDuplicatedURLError(url)
 }
 
-func (m *DBRepo) Get(id model.URLID) (string, error) {
+func (m *DBRepo) Get(ctx context.Context, id model.URLID) (string, error) {
 	var url string
-	err := m.db.QueryRow("SELECT url FROM links WHERE id = $1", id).Scan(&url)
+	err := m.db.QueryRowContext(ctx, "SELECT url FROM links WHERE id = $1", id).Scan(&url)
 
 	if err == sql.ErrNoRows {
 		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q doesn't exist", id), http.StatusNotFound)
@@ -82,8 +88,13 @@ func (m *DBRepo) Get(id model.URLID) (string, error) {
 	return url, err
 }
 
-func (m *DBRepo) BatchPut(urls []string) ([]model.URLID, error) {
-	tx, err := m.db.Begin()
+func (m *DBRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID, error) {
+	userId, err := GetUserId(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -99,7 +110,7 @@ func (m *DBRepo) BatchPut(urls []string) ([]model.URLID, error) {
 
 	var res []model.URLID
 	for _, url := range urls {
-		id, err1 := doPut(url, tx)
+		id, err1 := doPut(url, userId, tx)
 		err = errors.Join(err, err1)
 		res = append(res, id)
 	}
@@ -112,8 +123,43 @@ func (m *DBRepo) BatchPut(urls []string) ([]model.URLID, error) {
 	return res, err
 }
 
-func (m *DBRepo) Ping() error {
-	return m.db.Ping()
+func (m *DBRepo) Ping(ctx context.Context) error {
+	return m.db.PingContext(ctx)
+}
+
+func (m *DBRepo) UserUrls(ctx context.Context) (map[model.URLID]string, error) {
+	userId, err := GetUserId(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := m.db.QueryContext(ctx, "SELECT id, url FROM links WHERE user_id = $1", userId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query urls: %w", err)
+	}
+	defer rows.Close()
+
+	res := make(map[model.URLID]string)
+	for rows.Next() {
+		var id model.URLID
+		var url string
+		err = rows.Scan(&id, &url)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan url: %w", err)
+		}
+		res[id] = url
+	}
+
+	return res, nil
+}
+
+func (m *DBRepo) CreateUser(ctx context.Context) (int, error) {
+	var userID int
+	err := m.db.QueryRowContext(ctx, "INSERT INTO users DEFAULT VALUES RETURNING id").Scan(&userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to insert user: %w", err)
+	}
+	return userID, nil
 }
 
 func applyMigrations(db *sql.DB, logger *zap.Logger) error {

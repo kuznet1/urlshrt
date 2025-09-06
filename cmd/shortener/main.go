@@ -32,14 +32,12 @@ func main() {
 	svc := service.NewService(repo, cfg)
 	h := handler.NewHandler(svc, logger)
 	requestLogger := middleware.NewRequestLogger(logger)
+	auth := middleware.NewAuth(repo, cfg, logger)
 	mux := chi.NewRouter()
-	mux.Use(requestLogger.Logging, middleware.Compression)
-	mux.Post("/", h.Shorten)
-	mux.Get("/{id}", h.Lengthen)
-	mux.Post("/api/shorten", h.ShortenJSON)
-	mux.Post("/api/shorten/batch", h.ShortenBatch)
+	mux.Use(requestLogger.Logging, middleware.Compression, auth.Authentication)
+	h.Register(mux)
 	mux.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		err := repo.Ping()
+		err := repo.Ping(r.Context())
 		if err != nil {
 			logger.Error("db conn error", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
