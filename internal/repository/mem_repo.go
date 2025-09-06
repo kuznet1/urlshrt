@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,16 +10,21 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	"os"
-	"slices"
 	"sync"
 )
 
 var errNoDB = errors.New("database is not used")
 
+type link struct {
+	URL    string `json:"url"`
+	UserID int    `json:"userID"`
+}
+
 type MemoryRepo struct {
-	mutex sync.RWMutex
-	store []string
-	fname string
+	mutex      sync.RWMutex
+	Store      []link `json:"store"`
+	UsersCount int    `json:"usersCount"`
+	fname      string
 }
 
 func NewMemoryRepo(fname string, logger *zap.Logger) (*MemoryRepo, error) {
@@ -40,7 +46,7 @@ func NewMemoryRepo(fname string, logger *zap.Logger) (*MemoryRepo, error) {
 	}
 	defer file.Close()
 
-	err = json.NewDecoder(file).Decode(&res.store)
+	err = json.NewDecoder(file).Decode(&res)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read saved urls from file %s: %w", fname, err)
 	}
@@ -58,55 +64,66 @@ func (m *MemoryRepo) dump() error {
 	}
 	defer file.Close()
 
-	return json.NewEncoder(file).Encode(m.store)
+	return json.NewEncoder(file).Encode(m)
 }
 
-func (m *MemoryRepo) Put(url string) (model.URLID, error) {
+func (m *MemoryRepo) Put(ctx context.Context, url string) (model.URLID, error) {
+	userID, err := getUserID(ctx)
+	if err != nil {
+		return 0, err
+	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	idx := slices.Index(m.store, url)
-	if idx >= 0 {
-		return model.URLID(idx), errs.NewDuplicatedURLError(url)
+	for i, v := range m.Store {
+		if v.URL == url {
+			return model.URLID(i), errs.NewDuplicatedURLError(url)
+		}
 	}
 
-	m.store = append(m.store, url)
+	m.Store = append(m.Store, link{URL: url, UserID: userID})
 
-	err := m.dump()
+	err = m.dump()
 	if err != nil {
 		return 0, err
 	}
 
-	return model.URLID(len(m.store) - 1), nil
+	return model.URLID(len(m.Store) - 1), nil
 }
 
-func (m *MemoryRepo) Get(id model.URLID) (string, error) {
+func (m *MemoryRepo) Get(_ context.Context, id model.URLID) (string, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
 	intID := int(id.ID())
-	if intID >= len(m.store) {
+	if intID >= len(m.Store) {
 		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q doesn't exist", id), http.StatusNotFound)
 	}
 
-	return m.store[intID], nil
+	return m.Store[intID].URL, nil
 }
 
-func (m *MemoryRepo) BatchPut(urls []string) ([]model.URLID, error) {
+func (m *MemoryRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID, error) {
+	userID, err := getUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	var err error
 	var res []model.URLID
 	for _, url := range urls {
-		idx := slices.Index(m.store, url)
-		if idx >= 0 {
-			res = append(res, model.URLID(idx))
-			err = errors.Join(err, errs.NewDuplicatedURLError(url))
-			continue
+		for i, v := range m.Store {
+			if v.URL == url {
+				res = append(res, model.URLID(i))
+				err = errors.Join(err, errs.NewDuplicatedURLError(url))
+				continue
+			}
 		}
-		m.store = append(m.store, url)
-		res = append(res, model.URLID(len(m.store)-1))
+
+		m.Store = append(m.Store, link{URL: url, UserID: userID})
+		res = append(res, model.URLID(len(m.Store)-1))
 	}
 
 	err1 := m.dump()
@@ -117,6 +134,33 @@ func (m *MemoryRepo) BatchPut(urls []string) ([]model.URLID, error) {
 	return res, err
 }
 
-func (m *MemoryRepo) Ping() error {
+func (m *MemoryRepo) Ping(__ context.Context) error {
 	return errNoDB
+}
+
+func (m *MemoryRepo) UserUrls(ctx context.Context) (map[model.URLID]string, error) {
+	userID, err := getUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	res := make(map[model.URLID]string)
+	for i, v := range m.Store {
+		if v.UserID == userID {
+			res[model.URLID(i)] = v.URL
+		}
+	}
+
+	return res, nil
+}
+
+func (m *MemoryRepo) CreateUser(_ context.Context) (int, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	res := m.UsersCount
+	m.UsersCount++
+	return res, nil
 }

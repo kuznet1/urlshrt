@@ -215,6 +215,41 @@ func TestPostBodyGzip(t *testing.T) {
 	})
 }
 
+func TestUrlsByUser(t *testing.T) {
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cookies []*http.Cookie
+	t.Run("shorten url", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		res := w.Result()
+		defer res.Body.Close()
+		resBody, err := io.ReadAll(res.Body)
+		require.NoError(t, err)
+		assert.Equal(t, "http://localhost:8088/0", string(resBody))
+		cookies = res.Cookies()
+	})
+
+	t.Run("user urls", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/api/user/urls", nil)
+		for _, c := range cookies {
+			r.AddCookie(c)
+		}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		res := w.Result()
+		defer res.Body.Close()
+		resBody, err := io.ReadAll(res.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, `[{"original_url":"http://example.com","short_url":"http://localhost:8088/0"}]`, string(resBody))
+	})
+}
+
 func newMux(t *testing.T) (*chi.Mux, error) {
 	cfg := config.Config{
 		ListenAddr:      ":8088",
@@ -233,13 +268,10 @@ func newMux(t *testing.T) (*chi.Mux, error) {
 
 	svc := service.NewService(repo, cfg)
 	h := NewHandler(svc, logger)
+	auth := middleware.NewAuth(repo, cfg, logger)
 	mux := chi.NewRouter()
-	mux.Use(middleware.Compression)
-	mux.Post("/", h.Shorten)
-	mux.Get("/{id}", h.Lengthen)
-	mux.Post("/api/shorten", h.ShortenJSON)
-	mux.Post("/api/shorten/batch", h.ShortenBatch)
-
+	mux.Use(middleware.Compression, auth.Authentication)
+	h.Register(mux)
 	t.Cleanup(func() {
 		os.Remove(repoFile)
 	})
