@@ -19,12 +19,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	repo, err := repository.NewMemoryRepo(cfg.FileStoragePath)
+	logger, err := zap.NewDevelopment()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	logger, err := zap.NewDevelopment()
+	repo, err := repository.NewRepo(cfg, logger)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,6 +37,16 @@ func main() {
 	mux.Post("/", h.Shorten)
 	mux.Get("/{id}", h.Lengthen)
 	mux.Post("/api/shorten", h.ShortenJSON)
+	mux.Post("/api/shorten/batch", h.ShortenBatch)
+	mux.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		err := repo.Ping()
+		if err != nil {
+			logger.Error("db conn error", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
 	err = http.ListenAndServe(cfg.ListenAddr, mux)

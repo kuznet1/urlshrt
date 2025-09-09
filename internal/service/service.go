@@ -17,10 +17,25 @@ func NewService(repo repository.Repo, cfg config.Config) Service {
 
 func (svc Service) Shorten(url string) (string, error) {
 	urlid, err := svc.repo.Put(url)
-	if err != nil {
-		return "", err
+	return svc.cfg.ShortenerPrefix + "/" + urlid.String(), err
+}
+
+func (svc Service) BatchShorten(urls []string) ([]string, error) {
+	if len(urls) == 0 {
+		return []string{}, nil
 	}
-	return svc.cfg.ShortenerPrefix + "/" + urlid.String(), nil
+
+	urlids, err := svc.repo.BatchPut(urls)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []string
+	for _, urlid := range urlids {
+		res = append(res, svc.cfg.ShortenerPrefix+"/"+urlid.String())
+	}
+
+	return res, nil
 }
 
 func (svc Service) Lengthen(id string) (string, error) {

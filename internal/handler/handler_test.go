@@ -55,15 +55,8 @@ func TestHandler(t *testing.T) {
 	}
 
 	t.Run("shorten url", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, r)
-		res := w.Result()
-		defer res.Body.Close()
-		resBody, err := io.ReadAll(res.Body)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusCreated, w.Code)
-		assert.Equal(t, "http://localhost:8088/0", string(resBody))
+		code := put(t, mux)
+		require.Equal(t, http.StatusCreated, code)
 	})
 
 	for _, test := range tests {
@@ -98,6 +91,47 @@ func TestShortenJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, w.Code)
 	assert.Equal(t, `{"result":"http://localhost:8088/0"}`, string(resBody))
+}
+
+func TestDuplicated(t *testing.T) {
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code := put(t, mux)
+	require.Equal(t, http.StatusCreated, code)
+
+	code = put(t, mux)
+	require.Equal(t, http.StatusConflict, code)
+}
+
+func put(t *testing.T, mux *chi.Mux) int {
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	res := w.Result()
+	defer res.Body.Close()
+	resBody, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "http://localhost:8088/0", string(resBody))
+	return res.StatusCode
+}
+
+func TestBacthShorten(t *testing.T) {
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/api/shorten/batch", strings.NewReader(`[{"correlation_id":"foo","original_url":"http://foo.bar"}]`))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	res := w.Result()
+	defer res.Body.Close()
+	resBody, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, `[{"correlation_id":"foo","short_url":"http://localhost:8088/0"}]`, string(resBody))
 }
 
 func TestShortenJSONGzip(t *testing.T) {
@@ -187,12 +221,12 @@ func newMux(t *testing.T) (*chi.Mux, error) {
 		ShortenerPrefix: "http://localhost:8088",
 	}
 
-	repo, err := repository.NewMemoryRepo(repoFile)
+	logger, err := zap.NewDevelopment()
 	if err != nil {
 		return nil, err
 	}
 
-	logger, err := zap.NewDevelopment()
+	repo, err := repository.NewMemoryRepo(repoFile, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -204,6 +238,7 @@ func newMux(t *testing.T) (*chi.Mux, error) {
 	mux.Post("/", h.Shorten)
 	mux.Get("/{id}", h.Lengthen)
 	mux.Post("/api/shorten", h.ShortenJSON)
+	mux.Post("/api/shorten/batch", h.ShortenBatch)
 
 	t.Cleanup(func() {
 		os.Remove(repoFile)

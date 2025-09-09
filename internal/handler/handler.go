@@ -31,12 +31,19 @@ func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 
 	body := string(bytes)
 	url, err := h.svc.Shorten(body)
-	if err != nil {
+	var duplicatedError *errs.DuplicatedURLError
+	isDuplicatedError := errors.As(err, &duplicatedError)
+	if err != nil && !isDuplicatedError {
 		internalError("failed to shorten url", err, h.logger, w)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	if isDuplicatedError {
+		w.WriteHeader(http.StatusConflict)
+	} else {
+		w.WriteHeader(http.StatusCreated)
+	}
+
 	w.Write([]byte(url))
 }
 
@@ -48,13 +55,54 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	url, err := h.svc.Shorten(req.URL)
-	if err != nil {
+	var duplicatedError *errs.DuplicatedURLError
+	isDuplicatedError := errors.As(err, &duplicatedError)
+	if err != nil && !isDuplicatedError {
 		internalError("failed to shorten url", err, h.logger, w)
 		return
 	}
 
 	resp := model.ShortenResponse{
 		Result: url,
+	}
+
+	if isDuplicatedError {
+		respJSON(w, resp, http.StatusConflict, h.logger)
+	} else {
+		respJSON(w, resp, http.StatusCreated, h.logger)
+	}
+}
+
+func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
+	var req []model.BatchShortenRequestItem
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode body: %s", err), http.StatusBadRequest)
+	}
+
+	var urls []string
+	for _, reqItem := range req {
+		urls = append(urls, reqItem.OriginalURL)
+	}
+
+	shortenLinks, err := h.svc.BatchShorten(urls)
+	var duplicatedError *errs.DuplicatedURLError
+	if errors.As(err, &duplicatedError) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+
+	if err != nil {
+		internalError("failed to shorten urls", err, h.logger, w)
+		return
+	}
+
+	resp := []model.BatchShortenResponseItem{}
+	for i := range urls {
+		resp = append(resp, model.BatchShortenResponseItem{
+			CorrelationID: req[i].CorrelationID,
+			ShortURL:      shortenLinks[i],
+		})
 	}
 
 	respJSON(w, resp, http.StatusCreated, h.logger)
