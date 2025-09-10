@@ -6,7 +6,8 @@ CREATE TABLE users
 );
 
 ALTER TABLE links
-    ADD COLUMN user_id INT;
+    ADD COLUMN user_id    INT,
+    ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT false;
 
 -- ALTER TABLE links
 --     ADD CONSTRAINT links_user_id_fkey

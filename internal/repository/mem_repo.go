@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/kuznet1/urlshrt/internal/config"
 	"github.com/kuznet1/urlshrt/internal/errs"
 	"github.com/kuznet1/urlshrt/internal/model"
 	"go.uber.org/zap"
@@ -16,39 +17,43 @@ import (
 var errNoDB = errors.New("database is not used")
 
 type link struct {
-	URL    string `json:"url"`
-	UserID int    `json:"userID"`
+	URL       string `json:"url"`
+	UserID    int    `json:"userID"`
+	IsDeleted bool   `json:"isDeleted"`
 }
 
 type MemoryRepo struct {
+	batchRemover
 	mutex      sync.RWMutex
-	Store      []link `json:"store"`
-	UsersCount int    `json:"usersCount"`
+	Store      []*link `json:"store"`
+	UsersCount int     `json:"usersCount"`
 	fname      string
+	logger     *zap.Logger
 }
 
-func NewMemoryRepo(fname string, logger *zap.Logger) (*MemoryRepo, error) {
-	res := &MemoryRepo{fname: fname}
+func NewMemoryRepo(cfg config.Config, logger *zap.Logger) (*MemoryRepo, error) {
+	res := &MemoryRepo{batchRemover: newBatchRemover(cfg), fname: cfg.FileStoragePath, logger: logger}
+	go res.deletionWorker(res.deleteImpl)
 
-	if fname == "" {
+	if cfg.FileStoragePath == "" {
 		logger.Info("file storage path is empty, saving to file is disabled")
 		return res, nil
 	}
 
-	_, err := os.Stat(fname)
+	_, err := os.Stat(cfg.FileStoragePath)
 	if err != nil {
 		return res, nil
 	}
 
-	file, err := os.Open(fname)
+	file, err := os.Open(cfg.FileStoragePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open saved urls file %s: %w", fname, err)
+		return nil, fmt.Errorf("failed to open saved urls file %s: %w", cfg.FileStoragePath, err)
 	}
 	defer file.Close()
 
 	err = json.NewDecoder(file).Decode(&res)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read saved urls from file %s: %w", fname, err)
+		return nil, fmt.Errorf("failed to read saved urls from file %s: %w", cfg.FileStoragePath, err)
 	}
 
 	return res, nil
@@ -81,7 +86,7 @@ func (m *MemoryRepo) Put(ctx context.Context, url string) (model.URLID, error) {
 		}
 	}
 
-	m.Store = append(m.Store, link{URL: url, UserID: userID})
+	m.Store = append(m.Store, &link{URL: url, UserID: userID})
 
 	err = m.dump()
 	if err != nil {
@@ -100,7 +105,12 @@ func (m *MemoryRepo) Get(_ context.Context, id model.URLID) (string, error) {
 		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q doesn't exist", id), http.StatusNotFound)
 	}
 
-	return m.Store[intID].URL, nil
+	res := m.Store[intID]
+	if res.IsDeleted {
+		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q is deleted", id), http.StatusGone)
+	}
+
+	return res.URL, nil
 }
 
 func (m *MemoryRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID, error) {
@@ -122,7 +132,7 @@ func (m *MemoryRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID
 			}
 		}
 
-		m.Store = append(m.Store, link{URL: url, UserID: userID})
+		m.Store = append(m.Store, &link{URL: url, UserID: userID})
 		res = append(res, model.URLID(len(m.Store)-1))
 	}
 
@@ -132,6 +142,25 @@ func (m *MemoryRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID
 	}
 
 	return res, err
+}
+
+func (m *MemoryRepo) deleteImpl(reqs []deleteLinkReq) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for _, req := range reqs {
+		if int(req.urlid) > len(m.Store) {
+			m.logger.Error("no such link")
+			continue
+		}
+
+		l := m.Store[req.urlid]
+		if l.UserID != req.userID {
+			m.logger.Error("access denied")
+			continue
+		}
+		l.IsDeleted = true
+	}
 }
 
 func (m *MemoryRepo) Ping(__ context.Context) error {

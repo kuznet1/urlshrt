@@ -14,14 +14,15 @@ type Repo interface {
 	BatchPut(ctx context.Context, urls []string) ([]model.URLID, error)
 	CreateUser(ctx context.Context) (int, error)
 	UserUrls(ctx context.Context) (map[model.URLID]string, error)
+	BatchDelete(ctx context.Context, urlids []model.URLID) error
 	Ping(ctx context.Context) error
 }
 
 func NewRepo(cfg config.Config, logger *zap.Logger) (Repo, error) {
 	if cfg.DatabaseDSN != "" {
-		return NewDBRepo(cfg.DatabaseDSN, logger)
+		return NewDBRepo(cfg, logger)
 	}
-	return NewMemoryRepo(cfg.FileStoragePath, logger)
+	return NewMemoryRepo(cfg, logger)
 }
 
 type key int

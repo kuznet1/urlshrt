@@ -39,6 +39,19 @@ func (svc Service) BatchShorten(ctx context.Context, urls []string) ([]string, e
 	return res, nil
 }
 
+func (svc Service) BatchDelete(ctx context.Context, ids []string) error {
+	var urlids []model.URLID
+	for _, id := range ids {
+		urlid, err := model.ParseURLID(id)
+		if err != nil {
+			return err
+		}
+		urlids = append(urlids, urlid)
+	}
+
+	return svc.repo.BatchDelete(ctx, urlids)
+}
+
 func (svc Service) UserUrls(ctx context.Context) ([]model.UrlsByUserResponseItem, error) {
 	urlids, err := svc.repo.UserUrls(ctx)
 	if err != nil {

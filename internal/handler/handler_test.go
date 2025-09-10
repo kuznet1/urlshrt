@@ -17,6 +17,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 const repoFile = "test-repo.json"
@@ -215,6 +216,60 @@ func TestPostBodyGzip(t *testing.T) {
 	})
 }
 
+func TestBatchDelete(t *testing.T) {
+	mux, err := newMux(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cookies []*http.Cookie
+	t.Run("shorten urls", func(t *testing.T) {
+		cookies = putWithCookie(t, mux, "http://example.com") // user 1
+		putWithCookie(t, mux, "http://foo.bar")               // user 2
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodDelete, "/api/user/urls", strings.NewReader(`["0","1"]`))
+		for _, c := range cookies {
+			r.AddCookie(c)
+		}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusAccepted, w.Code)
+	})
+
+	t.Run("check redirect 1", func(t *testing.T) {
+		deadline := time.Now().Add(time.Second * 5)
+		for {
+			r := httptest.NewRequest(http.MethodGet, "/0", nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, r)
+			res := w.Result()
+			defer res.Body.Close()
+
+			if res.StatusCode == http.StatusGone {
+				break
+			}
+
+			if time.Now().After(deadline) {
+				t.Fatalf("deadline exceeded")
+			}
+		}
+	})
+
+	t.Run("check redirect 2", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/1", nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		res := w.Result()
+		defer res.Body.Close()
+
+		require.Equal(t, "http://foo.bar", res.Header.Get("Location"))
+		require.Equal(t, http.StatusTemporaryRedirect, res.StatusCode)
+	})
+}
+
 func TestUrlsByUser(t *testing.T) {
 	mux, err := newMux(t)
 	if err != nil {
@@ -223,15 +278,7 @@ func TestUrlsByUser(t *testing.T) {
 
 	var cookies []*http.Cookie
 	t.Run("shorten url", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, r)
-		res := w.Result()
-		defer res.Body.Close()
-		resBody, err := io.ReadAll(res.Body)
-		require.NoError(t, err)
-		assert.Equal(t, "http://localhost:8088/0", string(resBody))
-		cookies = res.Cookies()
+		cookies = putWithCookie(t, mux, "http://example.com")
 	})
 
 	t.Run("user urls", func(t *testing.T) {
@@ -250,10 +297,22 @@ func TestUrlsByUser(t *testing.T) {
 	})
 }
 
+func putWithCookie(t *testing.T, mux *chi.Mux, url string) []*http.Cookie {
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(url))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	res := w.Result()
+	defer res.Body.Close()
+	_, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	return res.Cookies()
+}
+
 func newMux(t *testing.T) (*chi.Mux, error) {
 	cfg := config.Config{
 		ListenAddr:      ":8088",
 		ShortenerPrefix: "http://localhost:8088",
+		FileStoragePath: repoFile,
 	}
 
 	logger, err := zap.NewDevelopment()
@@ -261,7 +320,7 @@ func newMux(t *testing.T) (*chi.Mux, error) {
 		return nil, err
 	}
 
-	repo, err := repository.NewMemoryRepo(repoFile, logger)
+	repo, err := repository.NewMemoryRepo(cfg, logger)
 	if err != nil {
 		return nil, err
 	}

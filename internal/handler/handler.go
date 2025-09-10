@@ -28,6 +28,7 @@ func (h Handler) Register(mux *chi.Mux) {
 	mux.Post("/api/shorten", h.ShortenJSON)
 	mux.Post("/api/shorten/batch", h.ShortenBatch)
 	mux.Get("/api/user/urls", h.UserUrls)
+	mux.Delete("/api/user/urls", h.DeleteBatch)
 }
 
 func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +115,22 @@ func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respJSON(w, resp, http.StatusCreated, h.logger)
+}
+
+func (h Handler) DeleteBatch(w http.ResponseWriter, r *http.Request) {
+	var req []string
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode body: %s", err), http.StatusBadRequest)
+	}
+
+	err = h.svc.BatchDelete(r.Context(), req)
+	if err != nil {
+		internalError("failed to shorten urls", err, h.logger, w)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func respJSON(w http.ResponseWriter, resp any, code int, logger *zap.Logger) {

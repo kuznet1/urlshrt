@@ -1,7 +1,8 @@
 BEGIN;
 
 ALTER TABLE links
-    DROP COLUMN IF EXISTS user_id;
+    DROP COLUMN IF EXISTS user_id,
+    DROP COLUMN IF EXISTS is_deleted;
 
 DROP TABLE IF EXISTS users;
 

@@ -7,21 +7,23 @@ import (
 	"fmt"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/kuznet1/urlshrt/internal/config"
 	"github.com/kuznet1/urlshrt/internal/errs"
 	"github.com/kuznet1/urlshrt/internal/model"
 	"go.uber.org/zap"
 	"net/http"
-
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type DBRepo struct {
-	db *sql.DB
+	batchRemover
+	db     *sql.DB
+	logger *zap.Logger
 }
 
-func NewDBRepo(dsn string, logger *zap.Logger) (*DBRepo, error) {
-	db, err := sql.Open("pgx", dsn)
+func NewDBRepo(cfg config.Config, logger *zap.Logger) (*DBRepo, error) {
+	db, err := sql.Open("pgx", cfg.DatabaseDSN)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -29,7 +31,9 @@ func NewDBRepo(dsn string, logger *zap.Logger) (*DBRepo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DBRepo{db: db}, nil
+	res := &DBRepo{newBatchRemover(cfg), db, logger}
+	go res.deletionWorker(res.deleteImpl)
+	return res, nil
 }
 
 func (m *DBRepo) Put(ctx context.Context, url string) (model.URLID, error) {
@@ -79,10 +83,15 @@ func doPut(url string, userID int, tx *sql.Tx) (model.URLID, error) {
 
 func (m *DBRepo) Get(ctx context.Context, id model.URLID) (string, error) {
 	var url string
-	err := m.db.QueryRowContext(ctx, "SELECT url FROM links WHERE id = $1", id).Scan(&url)
+	var isDeleted bool
+	err := m.db.QueryRowContext(ctx, "SELECT url, is_deleted FROM links WHERE id = $1", id).Scan(&url, &isDeleted)
 
 	if err == sql.ErrNoRows {
 		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q doesn't exist", id), http.StatusNotFound)
+	}
+
+	if isDeleted {
+		return "", errs.NewHTTPError(fmt.Sprintf("url for shortening %q is deleted", id), http.StatusGone)
 	}
 
 	return url, err
@@ -121,6 +130,42 @@ func (m *DBRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID, er
 
 	done = true
 	return res, err
+}
+
+func (m *DBRepo) deleteImpl(reqs []deleteLinkReq) {
+	tx, err := m.db.Begin()
+	if err != nil {
+		m.logger.Error("failed to begin transaction", zap.Error(err))
+		return
+	}
+
+	done := false
+	defer func() {
+		if done {
+			tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}()
+
+	for _, req := range reqs {
+		res, err := tx.Exec(
+			"UPDATE links SET is_deleted = TRUE WHERE user_id = $1 AND id = $2",
+			req.userID, req.urlid,
+		)
+		if err != nil {
+			m.logger.Error("failed to delete link", zap.Error(err))
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			m.logger.Error("failed to get affected rows", zap.Error(err))
+		}
+		if rows == 0 {
+			m.logger.Error("no such link or access denied")
+		}
+	}
+
+	done = true
 }
 
 func (m *DBRepo) Ping(ctx context.Context) error {
