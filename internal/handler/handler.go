@@ -22,6 +22,15 @@ func NewHandler(svc service.Service, logger *zap.Logger) Handler {
 	return Handler{svc: svc, logger: logger}
 }
 
+func (h Handler) Register(mux *chi.Mux) {
+	mux.Post("/", h.Shorten)
+	mux.Get("/{id}", h.Lengthen)
+	mux.Post("/api/shorten", h.ShortenJSON)
+	mux.Post("/api/shorten/batch", h.ShortenBatch)
+	mux.Get("/api/user/urls", h.UserUrls)
+	mux.Delete("/api/user/urls", h.DeleteBatch)
+}
+
 func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -30,7 +39,7 @@ func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body := string(bytes)
-	url, err := h.svc.Shorten(body)
+	url, err := h.svc.Shorten(r.Context(), body)
 	var duplicatedError *errs.DuplicatedURLError
 	isDuplicatedError := errors.As(err, &duplicatedError)
 	if err != nil && !isDuplicatedError {
@@ -54,7 +63,7 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("failed to decode body: %s", err), http.StatusBadRequest)
 	}
 
-	url, err := h.svc.Shorten(req.URL)
+	url, err := h.svc.Shorten(r.Context(), req.URL)
 	var duplicatedError *errs.DuplicatedURLError
 	isDuplicatedError := errors.As(err, &duplicatedError)
 	if err != nil && !isDuplicatedError {
@@ -85,7 +94,7 @@ func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
 		urls = append(urls, reqItem.OriginalURL)
 	}
 
-	shortenLinks, err := h.svc.BatchShorten(urls)
+	shortenLinks, err := h.svc.BatchShorten(r.Context(), urls)
 	var duplicatedError *errs.DuplicatedURLError
 	if errors.As(err, &duplicatedError) {
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -108,6 +117,22 @@ func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
 	respJSON(w, resp, http.StatusCreated, h.logger)
 }
 
+func (h Handler) DeleteBatch(w http.ResponseWriter, r *http.Request) {
+	var req []string
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode body: %s", err), http.StatusBadRequest)
+	}
+
+	err = h.svc.BatchDelete(r.Context(), req)
+	if err != nil {
+		internalError("failed to shorten urls", err, h.logger, w)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+}
+
 func respJSON(w http.ResponseWriter, resp any, code int, logger *zap.Logger) {
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -122,7 +147,7 @@ func respJSON(w http.ResponseWriter, resp any, code int, logger *zap.Logger) {
 func (h Handler) Lengthen(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	url, err := h.svc.Lengthen(id)
+	url, err := h.svc.Lengthen(r.Context(), id)
 	var httpErr *errs.HTTPError
 	if errors.As(err, &httpErr) {
 		http.Error(w, httpErr.Error(), httpErr.Code())
@@ -135,6 +160,21 @@ func (h Handler) Lengthen(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Location", url)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+}
+
+func (h Handler) UserUrls(w http.ResponseWriter, r *http.Request) {
+	urls, err := h.svc.UserUrls(r.Context())
+	if err != nil {
+		internalError("failed to get urls", err, h.logger, w)
+		return
+	}
+
+	status := http.StatusOK
+	if len(urls) == 0 {
+		status = http.StatusNoContent
+	}
+
+	respJSON(w, urls, status, h.logger)
 }
 
 func internalError(msg string, err error, logger *zap.Logger, w http.ResponseWriter) {
