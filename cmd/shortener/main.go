@@ -8,6 +8,7 @@ import (
 	"github.com/kuznet1/urlshrt/internal/middleware"
 	"github.com/kuznet1/urlshrt/internal/repository"
 	"github.com/kuznet1/urlshrt/internal/service"
+	"github.com/kuznet1/urlshrt/internal/service/audit"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
@@ -30,6 +31,20 @@ func main() {
 	}
 
 	svc := service.NewService(repo, cfg)
+
+	if cfg.AuditFile != "" {
+		listener, err := audit.NewFile(cfg.AuditFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer listener.Close()
+		svc.Subscribe(listener)
+	}
+
+	if cfg.AuditURL != "" {
+		svc.Subscribe(audit.NewURLAudit(cfg.AuditURL))
+	}
+
 	h := handler.NewHandler(svc, logger)
 	requestLogger := middleware.NewRequestLogger(logger)
 	auth := middleware.NewAuth(repo, cfg, logger)

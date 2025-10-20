@@ -29,7 +29,7 @@ type key int
 
 const UserIDKey key = iota
 
-func getUserID(ctx context.Context) (int, error) {
+func GetUserID(ctx context.Context) (int, error) {
 	val := ctx.Value(UserIDKey)
 	id, ok := val.(int)
 	if !ok {

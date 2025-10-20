@@ -37,7 +37,7 @@ func NewDBRepo(cfg config.Config, logger *zap.Logger) (*DBRepo, error) {
 }
 
 func (m *DBRepo) Put(ctx context.Context, url string) (model.URLID, error) {
-	userID, err := getUserID(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -98,7 +98,7 @@ func (m *DBRepo) Get(ctx context.Context, id model.URLID) (string, error) {
 }
 
 func (m *DBRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID, error) {
-	userID, err := getUserID(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (m *DBRepo) Ping(ctx context.Context) error {
 }
 
 func (m *DBRepo) UserUrls(ctx context.Context) (map[model.URLID]string, error) {
-	userID, err := getUserID(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

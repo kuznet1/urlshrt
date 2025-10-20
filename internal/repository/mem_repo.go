@@ -73,7 +73,7 @@ func (m *MemoryRepo) dump() error {
 }
 
 func (m *MemoryRepo) Put(ctx context.Context, url string) (model.URLID, error) {
-	userID, err := getUserID(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -114,7 +114,7 @@ func (m *MemoryRepo) Get(_ context.Context, id model.URLID) (string, error) {
 }
 
 func (m *MemoryRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID, error) {
-	userID, err := getUserID(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (m *MemoryRepo) Ping(__ context.Context) error {
 }
 
 func (m *MemoryRepo) UserUrls(ctx context.Context) (map[model.URLID]string, error) {
-	userID, err := getUserID(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
