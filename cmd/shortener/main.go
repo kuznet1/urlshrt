@@ -12,9 +12,15 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 )
 
 func main() {
+	go func() {
+		log.Println("pprof listening on :6060")
+		log.Fatal(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	cfg, err := config.ParseArgs()
 	if err != nil {
 		log.Fatal(err)

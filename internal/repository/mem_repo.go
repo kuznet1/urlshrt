@@ -123,12 +123,13 @@ func (m *MemoryRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID
 	defer m.mutex.Unlock()
 
 	var res []model.URLID
+outer:
 	for _, url := range urls {
 		for i, v := range m.Store {
 			if v.URL == url {
 				res = append(res, model.URLID(i))
 				err = errors.Join(err, errs.NewDuplicatedURLError(url))
-				continue
+				continue outer
 			}
 		}
 

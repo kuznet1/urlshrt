@@ -64,22 +64,21 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	url, err := h.svc.Shorten(r.Context(), req.URL)
-	var duplicatedError *errs.DuplicatedURLError
-	isDuplicatedError := errors.As(err, &duplicatedError)
-	if err != nil && !isDuplicatedError {
-		internalError("failed to shorten url", err, h.logger, w)
-		return
-	}
-
 	resp := model.ShortenResponse{
 		Result: url,
 	}
 
-	if isDuplicatedError {
-		respJSON(w, resp, http.StatusConflict, h.logger)
-	} else {
-		respJSON(w, resp, http.StatusCreated, h.logger)
+	if err != nil {
+		var duplicatedError *errs.DuplicatedURLError
+		if errors.As(err, &duplicatedError) {
+			respJSON(w, resp, http.StatusConflict, h.logger)
+		} else {
+			internalError("failed to shorten url", err, h.logger, w)
+		}
+		return
 	}
+
+	respJSON(w, resp, http.StatusCreated, h.logger)
 }
 
 func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {

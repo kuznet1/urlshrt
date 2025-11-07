@@ -308,7 +308,7 @@ func putWithCookie(t *testing.T, mux *chi.Mux, url string) []*http.Cookie {
 	return res.Cookies()
 }
 
-func newMux(t *testing.T) (*chi.Mux, error) {
+func newMux(t testing.TB) (*chi.Mux, error) {
 	cfg := config.Config{
 		ListenAddr:      ":8088",
 		ShortenerPrefix: "http://localhost:8088",
