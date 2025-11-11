@@ -22,7 +22,7 @@ func newBatchRemover(cfg config.Config) batchRemover {
 }
 
 func (m *batchRemover) BatchDelete(ctx context.Context, urlids []model.URLID) error {
-	userID, err := getUserID(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return err
 	}
