@@ -16,12 +16,15 @@ import (
 	"net/http"
 )
 
+// DBRepo is a PostgreSQL-backed implementation of Repo.
+// It stores short URLs in a relational database and supports batch operations and per-user ownership.
 type DBRepo struct {
 	batchRemover
 	db     *sql.DB
 	logger *zap.Logger
 }
 
+// NewDBRepo performs a public package operation. Top-level handler/function.
 func NewDBRepo(cfg config.Config, logger *zap.Logger) (*DBRepo, error) {
 	db, err := sql.Open("pgx", cfg.DatabaseDSN)
 	if err != nil {
@@ -36,6 +39,7 @@ func NewDBRepo(cfg config.Config, logger *zap.Logger) (*DBRepo, error) {
 	return res, nil
 }
 
+// Put is a method that provides public behavior for the corresponding type.
 func (m *DBRepo) Put(ctx context.Context, url string) (model.URLID, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
@@ -81,6 +85,7 @@ func doPut(url string, userID int, tx *sql.Tx) (model.URLID, error) {
 	return urlid, errs.NewDuplicatedURLError(url)
 }
 
+// Get is a method that provides public behavior for the corresponding type.
 func (m *DBRepo) Get(ctx context.Context, id model.URLID) (string, error) {
 	var url string
 	var isDeleted bool
@@ -97,6 +102,7 @@ func (m *DBRepo) Get(ctx context.Context, id model.URLID) (string, error) {
 	return url, err
 }
 
+// BatchPut is a method that provides public behavior for the corresponding type.
 func (m *DBRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
@@ -168,10 +174,12 @@ func (m *DBRepo) deleteImpl(reqs []deleteLinkReq) {
 	done = true
 }
 
+// Ping is a method that provides public behavior for the corresponding type.
 func (m *DBRepo) Ping(ctx context.Context) error {
 	return m.db.PingContext(ctx)
 }
 
+// UserUrls is a method that provides public behavior for the corresponding type.
 func (m *DBRepo) UserUrls(ctx context.Context) (map[model.URLID]string, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
@@ -202,6 +210,7 @@ func (m *DBRepo) UserUrls(ctx context.Context) (map[model.URLID]string, error) {
 	return res, nil
 }
 
+// CreateUser is a method that provides public behavior for the corresponding type.
 func (m *DBRepo) CreateUser(ctx context.Context) (int, error) {
 	var userID int
 	err := m.db.QueryRowContext(ctx, "INSERT INTO users DEFAULT VALUES RETURNING id").Scan(&userID)

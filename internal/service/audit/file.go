@@ -8,10 +8,12 @@ import (
 	"time"
 )
 
+// FileAudit writes audit events to an io.Writer (typically a file).
 type FileAudit struct {
 	file *os.File
 }
 
+// NewFile performs a public package operation. Top-level handler/function.
 func NewFile(fname string) (*FileAudit, error) {
 	f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -22,6 +24,8 @@ func NewFile(fname string) (*FileAudit, error) {
 	}, nil
 }
 
+// OnAuditEvt writes the event to the underlying writer in JSON format.
+// It implements the AuditSubscriber interface.
 func (a *FileAudit) OnAuditEvt(userID int, action model.AuditAction, url string) error {
 	return json.NewEncoder(a.file).Encode(model.AuditEvent{
 		TS:     time.Now().Unix(),
@@ -31,6 +35,7 @@ func (a *FileAudit) OnAuditEvt(userID int, action model.AuditAction, url string)
 	})
 }
 
+// Close is a method that provides public behavior for the corresponding type.
 func (a *FileAudit) Close() error {
 	return a.file.Close()
 }

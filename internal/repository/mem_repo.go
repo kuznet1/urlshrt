@@ -22,6 +22,8 @@ type link struct {
 	IsDeleted bool   `json:"isDeleted"`
 }
 
+// MemoryRepo is an in-memory implementation of Repo.
+// It is intended for tests and development; data is not persisted across process restarts.
 type MemoryRepo struct {
 	batchRemover
 	mutex      sync.RWMutex
@@ -31,6 +33,7 @@ type MemoryRepo struct {
 	logger     *zap.Logger
 }
 
+// NewMemoryRepo performs a public package operation. Top-level handler/function.
 func NewMemoryRepo(cfg config.Config, logger *zap.Logger) (*MemoryRepo, error) {
 	res := &MemoryRepo{batchRemover: newBatchRemover(cfg), fname: cfg.FileStoragePath, logger: logger}
 	go res.deletionWorker(res.deleteImpl)
@@ -72,6 +75,7 @@ func (m *MemoryRepo) dump() error {
 	return json.NewEncoder(file).Encode(m)
 }
 
+// Put is a method that provides public behavior for the corresponding type.
 func (m *MemoryRepo) Put(ctx context.Context, url string) (model.URLID, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
@@ -96,6 +100,7 @@ func (m *MemoryRepo) Put(ctx context.Context, url string) (model.URLID, error) {
 	return model.URLID(len(m.Store) - 1), nil
 }
 
+// Get is a method that provides public behavior for the corresponding type.
 func (m *MemoryRepo) Get(_ context.Context, id model.URLID) (string, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -113,6 +118,7 @@ func (m *MemoryRepo) Get(_ context.Context, id model.URLID) (string, error) {
 	return res.URL, nil
 }
 
+// BatchPut is a method that provides public behavior for the corresponding type.
 func (m *MemoryRepo) BatchPut(ctx context.Context, urls []string) ([]model.URLID, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
@@ -164,10 +170,12 @@ func (m *MemoryRepo) deleteImpl(reqs []deleteLinkReq) {
 	}
 }
 
+// Ping is a method that provides public behavior for the corresponding type.
 func (m *MemoryRepo) Ping(__ context.Context) error {
 	return errNoDB
 }
 
+// UserUrls is a method that provides public behavior for the corresponding type.
 func (m *MemoryRepo) UserUrls(ctx context.Context) (map[model.URLID]string, error) {
 	userID, err := GetUserID(ctx)
 	if err != nil {
@@ -187,6 +195,7 @@ func (m *MemoryRepo) UserUrls(ctx context.Context) (map[model.URLID]string, erro
 	return res, nil
 }
 
+// CreateUser is a method that provides public behavior for the corresponding type.
 func (m *MemoryRepo) CreateUser(_ context.Context) (int, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()

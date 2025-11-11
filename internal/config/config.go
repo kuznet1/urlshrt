@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// Config contains runtime configuration loaded from flags and environment variables.
+// See struct tags for env variable names; command-line flags mirror these fields.
 type Config struct {
 	ListenAddr         string        `env:"SERVER_ADDRESS"`
 	ShortenerPrefix    string        `env:"BASE_URL"`
@@ -18,6 +20,8 @@ type Config struct {
 	AuditURL           string        `env:"AUDIT_URL"`
 }
 
+// ParseArgs populates Config from command-line flags and environment variables.
+// Environment variables take the form described by struct tags (e.g., SERVER_ADDRESS, BASE_URL).
 func ParseArgs() (Config, error) {
 	cfg := Config{}
 	flag.StringVar(&cfg.ListenAddr, "a", ":8080", "address to listen on")

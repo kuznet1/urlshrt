@@ -13,15 +13,21 @@ import (
 	"net/http"
 )
 
+// Handler wires the HTTP API for the URL shortener.
+// It mounts routes, validates/decodes requests, encodes responses,
+// and translates domain errors into proper HTTP status codes.
 type Handler struct {
 	svc    service.Service
 	logger *zap.Logger
 }
 
+// NewHandler constructs a Handler bound to the given Service and logger.
+// It does not register routes by itself; call Register on the returned handler.
 func NewHandler(svc service.Service, logger *zap.Logger) Handler {
 	return Handler{svc: svc, logger: logger}
 }
 
+// Register is a method that provides public behavior for the corresponding type.
 func (h Handler) Register(mux *chi.Mux) {
 	mux.Post("/", h.Shorten)
 	mux.Get("/{id}", h.Lengthen)
@@ -31,6 +37,7 @@ func (h Handler) Register(mux *chi.Mux) {
 	mux.Delete("/api/user/urls", h.DeleteBatch)
 }
 
+// Shorten is a method that provides public behavior for the corresponding type.
 func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -56,6 +63,7 @@ func (h Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(url))
 }
 
+// ShortenJSON is a method that provides public behavior for the corresponding type.
 func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 	var req model.ShortenRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -81,6 +89,7 @@ func (h Handler) ShortenJSON(w http.ResponseWriter, r *http.Request) {
 	respJSON(w, resp, http.StatusCreated, h.logger)
 }
 
+// ShortenBatch is a method that provides public behavior for the corresponding type.
 func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
 	var req []model.BatchShortenRequestItem
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -116,6 +125,7 @@ func (h Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
 	respJSON(w, resp, http.StatusCreated, h.logger)
 }
 
+// DeleteBatch is a method that provides public behavior for the corresponding type.
 func (h Handler) DeleteBatch(w http.ResponseWriter, r *http.Request) {
 	var req []string
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -143,6 +153,7 @@ func respJSON(w http.ResponseWriter, resp any, code int, logger *zap.Logger) {
 	w.Write(data)
 }
 
+// Lengthen is a method that provides public behavior for the corresponding type.
 func (h Handler) Lengthen(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -161,6 +172,7 @@ func (h Handler) Lengthen(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
+// UserUrls is a method that provides public behavior for the corresponding type.
 func (h Handler) UserUrls(w http.ResponseWriter, r *http.Request) {
 	urls, err := h.svc.UserUrls(r.Context())
 	if err != nil {
