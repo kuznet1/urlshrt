@@ -25,15 +25,18 @@ func newCompressedWriter(httpWriter http.ResponseWriter) *compressedWriter {
 	}
 }
 
+// Header is a method that provides public behavior for the corresponding type.
 func (c *compressedWriter) Header() http.Header {
 	return c.httpWriter.Header()
 }
 
+// WriteHeader is a method that provides public behavior for the corresponding type.
 func (c *compressedWriter) WriteHeader(statusCode int) {
 	c.status = statusCode
 	// headers will be written later
 }
 
+// Write is a method that provides public behavior for the corresponding type.
 func (c *compressedWriter) Write(p []byte) (int, error) {
 	c.initWriter()
 	return c.writer.Write(p)
@@ -61,6 +64,7 @@ func (c *compressedWriter) initWriter() {
 	c.writer = gzip.NewWriter(c.httpWriter)
 }
 
+// Close is a method that provides public behavior for the corresponding type.
 func (c *compressedWriter) Close() error {
 	if c.writer == nil {
 		c.httpWriter.WriteHeader(c.status)
@@ -74,6 +78,7 @@ func (c *compressedWriter) Close() error {
 	return nil
 }
 
+// Compression performs a public package operation. Top-level handler/function.
 func Compression(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 

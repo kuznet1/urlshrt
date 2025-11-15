@@ -21,8 +21,9 @@ func newBatchRemover(cfg config.Config) batchRemover {
 	return batchRemover{cfg: cfg, delCh: make(chan deleteLinkReq, 1)}
 }
 
+// BatchDelete is a method that provides public behavior for the corresponding type.
 func (m *batchRemover) BatchDelete(ctx context.Context, urlids []model.URLID) error {
-	userID, err := getUserID(ctx)
+	userID, err := GetUserID(ctx)
 	if err != nil {
 		return err
 	}

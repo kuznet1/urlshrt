@@ -5,23 +5,40 @@ import (
 	"github.com/kuznet1/urlshrt/internal/config"
 	"github.com/kuznet1/urlshrt/internal/model"
 	"github.com/kuznet1/urlshrt/internal/repository"
+	"go.uber.org/zap"
 )
 
+// Service contains the application business logic atop the storage layer.
+// It coordinates repository operations and publishes audit events.
 type Service struct {
-	repo repository.Repo
-	cfg  config.Config
+	repo   repository.Repo
+	cfg    config.Config
+	logger *zap.Logger
+	subs   []AuditSubscriber
 }
 
-func NewService(repo repository.Repo, cfg config.Config) Service {
-	return Service{repo: repo, cfg: cfg}
+// AuditSubscriber is notified about URL creation events.
+// Implementations may forward events to files, HTTP endpoints, or external systems.
+type AuditSubscriber interface {
+	OnAuditEvt(ctx context.Context, userID int, action model.AuditAction, url string) error
 }
 
-func (svc Service) Shorten(ctx context.Context, url string) (string, error) {
+// NewService constructs a Service with the given repository and configuration.
+func NewService(repo repository.Repo, cfg config.Config, logger *zap.Logger) Service {
+	return Service{repo: repo, cfg: cfg, logger: logger}
+}
+
+// Shorten validates and stores a single URL and returns its short identifier.
+// If the URL already exists for the user, a DuplicatedURLError is returned.
+func (svc *Service) Shorten(ctx context.Context, url string) (string, error) {
 	urlid, err := svc.repo.Put(ctx, url)
+	svc.fire(ctx, model.ActionShorten, url)
 	return urlid.AsURL(svc.cfg.ShortenerPrefix), err
 }
 
-func (svc Service) BatchShorten(ctx context.Context, urls []string) ([]string, error) {
+// BatchShorten stores multiple URLs at once and returns their identifiers in the same order.
+// Errors for individual items are combined; duplicates are reported as DuplicatedURLError.
+func (svc *Service) BatchShorten(ctx context.Context, urls []string) ([]string, error) {
 	if len(urls) == 0 {
 		return []string{}, nil
 	}
@@ -39,7 +56,9 @@ func (svc Service) BatchShorten(ctx context.Context, urls []string) ([]string, e
 	return res, nil
 }
 
-func (svc Service) BatchDelete(ctx context.Context, ids []string) error {
+// BatchDelete removes the given short ids that belong to the current user.
+// The actual deletion strategy (immediate vs. batched) depends on the repository implementation.
+func (svc *Service) BatchDelete(ctx context.Context, ids []string) error {
 	var urlids []model.URLID
 	for _, id := range ids {
 		urlid, err := model.ParseURLID(id)
@@ -52,7 +71,8 @@ func (svc Service) BatchDelete(ctx context.Context, ids []string) error {
 	return svc.repo.BatchDelete(ctx, urlids)
 }
 
-func (svc Service) UserUrls(ctx context.Context) ([]model.UrlsByUserResponseItem, error) {
+// UserUrls returns a list of the user's URLs along with their absolute short forms.
+func (svc *Service) UserUrls(ctx context.Context) ([]model.UrlsByUserResponseItem, error) {
 	urlids, err := svc.repo.UserUrls(ctx)
 	if err != nil {
 		return nil, err
@@ -69,10 +89,34 @@ func (svc Service) UserUrls(ctx context.Context) ([]model.UrlsByUserResponseItem
 	return res, nil
 }
 
-func (svc Service) Lengthen(ctx context.Context, id string) (string, error) {
+// Lengthen resolves a short identifier back to the original URL.
+func (svc *Service) Lengthen(ctx context.Context, id string) (string, error) {
 	urlid, err := model.ParseURLID(id)
 	if err != nil {
 		return "", err
 	}
-	return svc.repo.Get(ctx, urlid)
+
+	url, err := svc.repo.Get(ctx, urlid)
+	svc.fire(ctx, model.ActionFollow, url)
+	return url, err
+}
+
+// Subscribe registers an AuditSubscriber that will be notified about URL creation events.
+func (svc *Service) Subscribe(sub AuditSubscriber) {
+	svc.subs = append(svc.subs, sub)
+}
+
+func (svc *Service) fire(ctx context.Context, action model.AuditAction, url string) {
+	userID, err := repository.GetUserID(ctx)
+	if err != nil {
+		svc.logger.Error("audit event handling error", zap.Error(err))
+	}
+	ctx, cancel := context.WithTimeout(ctx, svc.cfg.AuditURLTimeout)
+	defer cancel()
+	for _, sub := range svc.subs {
+		err = sub.OnAuditEvt(ctx, userID, action, url)
+		if err != nil {
+			svc.logger.Error("audit event handling error", zap.Error(err))
+		}
+	}
 }

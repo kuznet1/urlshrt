@@ -8,12 +8,19 @@ import (
 	"github.com/kuznet1/urlshrt/internal/middleware"
 	"github.com/kuznet1/urlshrt/internal/repository"
 	"github.com/kuznet1/urlshrt/internal/service"
+	"github.com/kuznet1/urlshrt/internal/service/audit"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 )
 
 func main() {
+	go func() {
+		log.Println("pprof listening on :6060")
+		log.Fatal(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	cfg, err := config.ParseArgs()
 	if err != nil {
 		log.Fatal(err)
@@ -29,7 +36,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	svc := service.NewService(repo, cfg)
+	svc := service.NewService(repo, cfg, logger)
+
+	if cfg.AuditFile != "" {
+		listener, err := audit.NewFile(cfg.AuditFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer listener.Close()
+		svc.Subscribe(listener)
+	}
+
+	if cfg.AuditURL != "" {
+		svc.Subscribe(audit.NewURLAudit(cfg.AuditURL))
+	}
+
 	h := handler.NewHandler(svc, logger)
 	requestLogger := middleware.NewRequestLogger(logger)
 	auth := middleware.NewAuth(repo, cfg, logger)
