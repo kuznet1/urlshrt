@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/kuznet1/urlshrt/internal/model"
@@ -26,7 +27,7 @@ func NewFile(fname string) (*FileAudit, error) {
 
 // OnAuditEvt writes the event to the underlying writer in JSON format.
 // It implements the AuditSubscriber interface.
-func (a *FileAudit) OnAuditEvt(userID int, action model.AuditAction, url string) error {
+func (a *FileAudit) OnAuditEvt(ctx context.Context, userID int, action model.AuditAction, url string) error {
 	return json.NewEncoder(a.file).Encode(model.AuditEvent{
 		TS:     time.Now().Unix(),
 		UserID: userID,

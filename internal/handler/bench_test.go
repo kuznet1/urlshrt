@@ -13,11 +13,10 @@ func Benchmark_postRoot(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	body := strings.NewReader("http://example.com")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r := httptest.NewRequest(http.MethodPost, "/", body)
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, r)
 	}

@@ -2,6 +2,7 @@ package audit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/kuznet1/urlshrt/internal/model"
 	"net/http"
@@ -22,7 +23,7 @@ func NewURLAudit(url string) *URLAudit {
 
 // OnAuditEvt sends the given event to the configured HTTP endpoint.
 // It implements the AuditSubscriber interface.
-func (a *URLAudit) OnAuditEvt(userID int, action model.AuditAction, url string) error {
+func (a *URLAudit) OnAuditEvt(ctx context.Context, userID int, action model.AuditAction, url string) error {
 	data, err := json.Marshal(model.AuditEvent{
 		TS:     time.Now().Unix(),
 		UserID: userID,
@@ -32,7 +33,14 @@ func (a *URLAudit) OnAuditEvt(userID int, action model.AuditAction, url string) 
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(a.url, "application/json", bytes.NewBuffer(data))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err == nil {
 		defer resp.Body.Close()
 	}

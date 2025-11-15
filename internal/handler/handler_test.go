@@ -325,7 +325,7 @@ func newMux(t testing.TB) (*chi.Mux, error) {
 		return nil, err
 	}
 
-	svc := service.NewService(repo, cfg)
+	svc := service.NewService(repo, cfg, logger)
 	h := NewHandler(svc, logger)
 	auth := middleware.NewAuth(repo, cfg, logger)
 	mux := chi.NewRouter()

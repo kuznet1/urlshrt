@@ -36,7 +36,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	svc := service.NewService(repo, cfg)
+	svc := service.NewService(repo, cfg, logger)
 
 	if cfg.AuditFile != "" {
 		listener, err := audit.NewFile(cfg.AuditFile)

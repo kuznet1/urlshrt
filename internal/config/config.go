@@ -18,6 +18,7 @@ type Config struct {
 	DeleteBatchTimeout time.Duration `env:"DELETE_BATCH_TIMEOUT"`
 	AuditFile          string        `env:"AUDIT_FILE"`
 	AuditURL           string        `env:"AUDIT_URL"`
+	AuditURLTimeout    time.Duration `env:"AUDIT_URL_REQ_TIMEOUT"`
 }
 
 // ParseArgs populates Config from command-line flags and environment variables.
@@ -33,6 +34,7 @@ func ParseArgs() (Config, error) {
 	flag.DurationVar(&cfg.DeleteBatchTimeout, "t", time.Second, "delete timeout")
 	flag.StringVar(&cfg.AuditFile, "af", "", "file to save audit logs")
 	flag.StringVar(&cfg.AuditURL, "au", "", "url to send audit logs to")
+	flag.DurationVar(&cfg.AuditURLTimeout, "aut", 10*time.Second, "audit request timeout")
 	flag.Parse()
 
 	return cfg, env.Parse(&cfg)

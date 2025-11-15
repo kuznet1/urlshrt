@@ -133,7 +133,7 @@ func newMuxExample() *chi.Mux {
 	}
 	logger, _ := zap.NewDevelopment()
 	repo, _ := repository.NewMemoryRepo(cfg, logger)
-	svc := service.NewService(repo, cfg)
+	svc := service.NewService(repo, cfg, logger)
 	h := NewHandler(svc, logger)
 	auth := middleware.NewAuth(repo, cfg, logger)
 
