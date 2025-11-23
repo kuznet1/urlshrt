@@ -10,23 +10,31 @@ import (
 	"net/http"
 )
 
+// CookieName is the name of the cookie that carries the JWT with the user identity.
 var CookieName = "token"
 
+// Auth issues and validates per-user JWT cookies and stores the user id in the request context.
+// If an incoming request has no valid cookie, a new user is created via the repository and a token is set.
 type Auth struct {
 	repo   repository.Repo
 	cfg    config.Config
 	logger *zap.Logger
 }
 
+// NewAuth creates the authentication middleware using the provided config, repository and logger.
 func NewAuth(repo repository.Repo, cfg config.Config, logger *zap.Logger) *Auth {
 	return &Auth{repo: repo, cfg: cfg, logger: logger}
 }
 
+// Claims contains the JWT payload used by the authentication middleware.
+// It includes the numeric UserID and standard registered claims.
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID int
 }
 
+// Authentication is an HTTP middleware that authenticates the request using a JWT cookie.
+// On success it injects the user id into the context and refreshes the cookie when needed.
 func (auth *Auth) Authentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(CookieName)
