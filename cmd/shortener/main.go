@@ -15,7 +15,17 @@ import (
 	_ "net/http/pprof"
 )
 
+var (
+	buildVersion string = "N/A"
+	buildDate    string = "N/A"
+	buildCommit  string = "N/A"
+)
+
 func main() {
+	log.Println("Build version: ", buildVersion)
+	log.Println("Build date: ", buildDate)
+	log.Println("Build commit: ", buildCommit)
+
 	go func() {
 		log.Println("pprof listening on :6060")
 		log.Fatal(http.ListenAndServe("localhost:6060", nil))
