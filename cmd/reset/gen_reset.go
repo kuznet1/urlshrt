@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -11,7 +12,43 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"text/template"
 )
+
+var (
+	resetPtrTemplate = template.Must(template.New("resetPtr").Parse(`
+	if s.{{.Name}} != nil {
+		*s.{{.Name}} = {{.Zero}}
+	}`))
+
+	resetPtrStringTemplate = template.Must(template.New("resetPtrString").Parse(`
+	if s.{{.Name}} != nil {
+		*s.{{.Name}} = ""
+	}`))
+
+	resetPtrBoolTemplate = template.Must(template.New("resetPtrBool").Parse(`
+	if s.{{.Name}} != nil {
+		*s.{{.Name}} = false
+	}`))
+
+	resetPtrResettableTemplate = template.Must(template.New("resetPtrResettable").Parse(`
+	if s.{{.Name}} != nil {
+		if resetter, ok := interface{}(s.{{.Name}}).(interface{ Reset() }); ok {
+			resetter.Reset()
+		}
+	}`))
+
+	resetInterfaceTemplate = template.Must(template.New("resetIface").Parse(`
+	if resetter, ok := s.{{.Name}}.(interface{ Reset() }); ok {
+		resetter.Reset()
+	}`))
+)
+
+func apply(t *template.Template, data any) string {
+	var b bytes.Buffer
+	_ = t.Execute(&b, data)
+	return b.String()
+}
 
 func genFieldReset(name string, t ast.Expr) string {
 	switch tt := t.(type) {
@@ -36,27 +73,25 @@ func genFieldReset(name string, t ast.Expr) string {
 			case "int", "int8", "int16", "int32", "int64",
 				"uint", "uint8", "uint16", "uint32", "uint64",
 				"float32", "float64", "complex64", "complex128":
-				return fmt.Sprintf(`
-	if s.%s != nil {
-		*s.%s = 0
-	}`, name, name)
+				return apply(resetPtrTemplate, map[string]any{
+					"Name": name,
+					"Zero": 0,
+				})
+
 			case "string":
-				return fmt.Sprintf(`
-	if s.%s != nil {
-		*s.%s = ""
-	}`, name, name)
+				return apply(resetPtrStringTemplate, map[string]any{
+					"Name": name,
+				})
+
 			case "bool":
-				return fmt.Sprintf(`
-	if s.%s != nil {
-		*s.%s = false
-	}`, name, name)
+				return apply(resetPtrBoolTemplate, map[string]any{
+					"Name": name,
+				})
+
 			default:
-				return fmt.Sprintf(`
-	if s.%s != nil {
-		if resetter, ok := interface{}(s.%s).(interface{ Reset() }); ok {
-			resetter.Reset()
-		}
-	}`, name, name)
+				return apply(resetPtrResettableTemplate, map[string]any{
+					"Name": name,
+				})
 			}
 		}
 		return fmt.Sprintf("	// unsupported pointer field '%s'", name)
@@ -68,10 +103,9 @@ func genFieldReset(name string, t ast.Expr) string {
 	case *ast.MapType:
 		return fmt.Sprintf("	clear(s.%s)", name)
 	default:
-		return fmt.Sprintf(`
-	if resetter, ok := s.%s.(interface{ Reset() }); ok {
-		resetter.Reset()
-	}`, name)
+		return apply(resetInterfaceTemplate, map[string]any{
+			"Name": name,
+		})
 	}
 }
 
@@ -145,7 +179,7 @@ func writeResets(pkg string, path string, methods []string) error {
 
 	f, err := os.Create(filepath.Join(path, "reset.gen.go"))
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create reset.gen.go: %w", err)
 	}
 	defer f.Close()
 
@@ -157,7 +191,11 @@ package %s
 
 `, pkg, strings.Join(methods, "\n\n"))
 
-	return err
+	if err != nil {
+		return fmt.Errorf("unable to write reset.gen.go: %w", err)
+	}
+
+	return nil
 }
 
 func main() {
@@ -167,7 +205,7 @@ func main() {
 
 	pkgs, err := packages.Load(cfg, "./...")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("unable to load packages", err)
 	}
 
 	if packages.PrintErrors(pkgs) > 0 {
@@ -181,7 +219,7 @@ func main() {
 		})
 
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("unable to run analyzer", err)
 		}
 
 		dir := filepath.Dir(pkg.GoFiles[0])

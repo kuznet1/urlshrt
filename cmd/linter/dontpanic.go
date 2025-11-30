@@ -2,12 +2,13 @@ package main
 
 import (
 	"go/ast"
+	"go/types"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
 var panicCheckAnalyzer = &analysis.Analyzer{
-	Name: "paniclint",
+	Name: "dontpanic",
 	Doc:  "check for panic(), log.Fatal() and os.Exit() outside of main package",
 	Run:  run,
 }
@@ -33,15 +34,19 @@ func checkExitOutsideMain(node ast.Node, pass *analysis.Pass, isMainPkg bool) bo
 		return true
 	}
 
-	if pkg.Name == "log" && sel.Sel.Name == "Fatal" {
-		pass.Reportf(call.Pos(), "should not use log.Fatal() outside main() func")
-	}
-
-	if pkg.Name == "os" && sel.Sel.Name == "Exit" {
-		pass.Reportf(call.Pos(), "should not use os.Exit() outside main() func")
-	}
-
+	checkUsage(pass, pkg, sel.Sel, "log", "Fatal")
+	checkUsage(pass, pkg, sel.Sel, "os", "Exit")
 	return true
+}
+
+func checkUsage(pass *analysis.Pass, pkgID, funID *ast.Ident, pkg, funName string) {
+	importedPkg, ok := pass.TypesInfo.Uses[pkgID].(*types.PkgName)
+	if !ok {
+		return
+	}
+	if importedPkg.Imported().Path() == pkg && funID.Name == funName {
+		pass.Reportf(funID.Pos(), "should not use %s.%s() outside main() func", pkg, funName)
+	}
 }
 
 func checkPanic(node ast.Node, pass *analysis.Pass) bool {
