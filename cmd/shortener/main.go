@@ -78,7 +78,11 @@ func main() {
 	})
 
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
-	err = http.ListenAndServe(cfg.ListenAddr, mux)
+	if cfg.EnableHTTPS {
+		err = http.ListenAndServeTLS(cfg.ListenAddr, cfg.HTTPSCertFile, cfg.HTTPSCertKey, mux)
+	} else {
+		err = http.ListenAndServe(cfg.ListenAddr, mux)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
