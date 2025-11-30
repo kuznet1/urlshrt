@@ -9,8 +9,8 @@ type Stack[T any] struct {
 
 func (s *Stack[T]) Push(v T) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.data = append(s.data, v)
-	s.mu.Unlock()
 }
 
 func (s *Stack[T]) Pop() (T, bool) {
