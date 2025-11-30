@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/kuznet1/urlshrt/internal/config"
@@ -13,6 +15,9 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
@@ -77,13 +82,37 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	srv := &http.Server{
+		Addr:    cfg.ListenAddr,
+		Handler: mux,
+	}
+
+	connsClosed := make(chan any)
+	go trapSignals(srv, connsClosed, logger)
+
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
 	if cfg.EnableHTTPS {
-		err = http.ListenAndServeTLS(cfg.ListenAddr, cfg.HTTPSCertFile, cfg.HTTPSCertKey, mux)
+		err = srv.ListenAndServeTLS(cfg.HTTPSCertFile, cfg.HTTPSCertKey)
 	} else {
-		err = http.ListenAndServe(cfg.ListenAddr, mux)
+		err = srv.ListenAndServe()
 	}
-	if err != nil {
+
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+
+	<-connsClosed
+	fmt.Println("Shortener service is stopped")
+}
+
+func trapSignals(srv *http.Server, connsClosed chan any, logger *zap.Logger) {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	<-signals
+	fmt.Println("Shortener service is stopping")
+	err := srv.Shutdown(context.Background())
+	if err != nil {
+		logger.Error("server shutdown error", zap.Error(err))
+	}
+	close(connsClosed)
 }
