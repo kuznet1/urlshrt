@@ -19,6 +19,9 @@ type Config struct {
 	AuditFile          string        `env:"AUDIT_FILE"`
 	AuditURL           string        `env:"AUDIT_URL"`
 	AuditURLTimeout    time.Duration `env:"AUDIT_URL_REQ_TIMEOUT"`
+	EnableHTTPS        bool          `env:"ENABLE_HTTPS"`
+	HTTPSCertFile      string        `env:"HTTPS_CERT_FILE"`
+	HTTPSCertKey       string        `env:"HTTPS_CERT_KEY"`
 }
 
 // ParseArgs populates Config from command-line flags and environment variables.
@@ -35,6 +38,9 @@ func ParseArgs() (Config, error) {
 	flag.StringVar(&cfg.AuditFile, "af", "", "file to save audit logs")
 	flag.StringVar(&cfg.AuditURL, "au", "", "url to send audit logs to")
 	flag.DurationVar(&cfg.AuditURLTimeout, "aut", 10*time.Second, "audit request timeout")
+	flag.BoolVar(&cfg.EnableHTTPS, "s", false, "enable https")
+	flag.StringVar(&cfg.HTTPSCertFile, "sc", "cert.pem", "x509 certificate file")
+	flag.StringVar(&cfg.HTTPSCertKey, "sk", "key.pem", "x509 certificate key")
 	flag.Parse()
 
 	return cfg, env.Parse(&cfg)
