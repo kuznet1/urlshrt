@@ -14,6 +14,9 @@ import (
 type Config struct {
 	ConfigPath         string        `env:"CONFIG"`
 	ListenAddr         string        `env:"SERVER_ADDRESS" json:"server_address"`
+	HTTPReadTimeout    time.Duration `env:"HTTP_READ_TIMEOUT"  json:"http_read_timeout"`
+	HTTPWriteTimeout   time.Duration `env:"HTTP_WRITE_TIMEOUT" json:"http_write_timeout"`
+	HTTPIdleTimeout    time.Duration `env:"HTTP_IDLE_TIMEOUT"  json:"http_idle_timeout"`
 	ShortenerPrefix    string        `env:"BASE_URL" json:"base_url"`
 	FileStoragePath    string        `env:"FILE_STORAGE_PATH" json:"file_storage_path"`
 	DatabaseDSN        string        `env:"DATABASE_DSN" json:"database_dsn"`
@@ -26,6 +29,7 @@ type Config struct {
 	EnableHTTPS        bool          `env:"ENABLE_HTTPS" json:"enable_https"`
 	HTTPSCertFile      string        `env:"HTTPS_CERT_FILE" json:"https_cert_file"`
 	HTTPSCertKey       string        `env:"HTTPS_CERT_KEY" json:"https_cert_key"`
+	ShutdownTimeout    time.Duration `env:"SHUTDOWN_TIMEOUT"  json:"shutdown_timeout"`
 }
 
 func parseConfig(cfg *Config) error {
@@ -57,6 +61,9 @@ func ParseArgs() (Config, error) {
 	cfg := Config{
 		ConfigPath:         "",
 		ListenAddr:         ":8080",
+		HTTPReadTimeout:    10 * time.Second,
+		HTTPWriteTimeout:   10 * time.Second,
+		HTTPIdleTimeout:    60 * time.Second,
 		ShortenerPrefix:    "http://localhost:8080",
 		FileStoragePath:    "",
 		DatabaseDSN:        "",
@@ -69,11 +76,15 @@ func ParseArgs() (Config, error) {
 		EnableHTTPS:        false,
 		HTTPSCertFile:      "cert.pem",
 		HTTPSCertKey:       "key.pem",
+		ShutdownTimeout:    15 * time.Second,
 	}
 
 	flag.StringVar(&cfg.ConfigPath, "config", cfg.ConfigPath, "path to config")
 	flag.StringVar(&cfg.ConfigPath, "c", cfg.ConfigPath, "path to config (shorthand)")
 	flag.StringVar(&cfg.ListenAddr, "a", cfg.ListenAddr, "address to listen on")
+	flag.DurationVar(&cfg.HTTPReadTimeout, "rt", cfg.HTTPReadTimeout, "http read timeout")
+	flag.DurationVar(&cfg.HTTPWriteTimeout, "wt", cfg.HTTPWriteTimeout, "http write timeout")
+	flag.DurationVar(&cfg.HTTPIdleTimeout, "it", cfg.HTTPIdleTimeout, "http idle timeout")
 	flag.StringVar(&cfg.ShortenerPrefix, "b", cfg.ShortenerPrefix, "prefix for url shortening")
 	flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "file storage path")
 	flag.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "database connection string")
@@ -86,6 +97,7 @@ func ParseArgs() (Config, error) {
 	flag.BoolVar(&cfg.EnableHTTPS, "s", cfg.EnableHTTPS, "enable https")
 	flag.StringVar(&cfg.HTTPSCertFile, "sc", cfg.HTTPSCertFile, "x509 certificate file")
 	flag.StringVar(&cfg.HTTPSCertKey, "sk", cfg.HTTPSCertKey, "x509 certificate key")
+	flag.DurationVar(&cfg.ShutdownTimeout, "st", cfg.ShutdownTimeout, "shutdown timeout")
 	flag.Parse()
 
 	err := parseConfig(&cfg)

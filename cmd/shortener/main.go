@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 var (
@@ -83,12 +84,15 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:    cfg.ListenAddr,
-		Handler: mux,
+		Addr:         cfg.ListenAddr,
+		ReadTimeout:  cfg.HTTPReadTimeout,
+		WriteTimeout: cfg.HTTPWriteTimeout,
+		IdleTimeout:  cfg.HTTPIdleTimeout,
+		Handler:      mux,
 	}
 
-	connsClosed := make(chan any)
-	go trapSignals(srv, connsClosed, logger)
+	connsClosed := make(chan struct{})
+	go trapSignals(srv, connsClosed, logger, cfg.ShutdownTimeout)
 
 	fmt.Println("Shortener service is starting at", cfg.ListenAddr)
 	if cfg.EnableHTTPS {
@@ -105,12 +109,16 @@ func main() {
 	fmt.Println("Shortener service is stopped")
 }
 
-func trapSignals(srv *http.Server, connsClosed chan any, logger *zap.Logger) {
+func trapSignals(srv *http.Server, connsClosed chan struct{}, logger *zap.Logger, shutdownTimeout time.Duration) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	<-signals
 	fmt.Println("Shortener service is stopping")
-	err := srv.Shutdown(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	err := srv.Shutdown(ctx)
 	if err != nil {
 		logger.Error("server shutdown error", zap.Error(err))
 	}
